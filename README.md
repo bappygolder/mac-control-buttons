@@ -41,3 +41,9 @@ open "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control C
 ## macOS Permissions
 
 macOS may prompt to allow Notifications for the app. Allowing them enables the click notifications when an action runs.
+
+## Roadmap & Future Features
+
+- **Downloadable Installer:** Create a compiled `.dmg` or `.app.zip` release so non-developers can simply download and install the app without running terminal build scripts.
+- **Automated CI/CD:** Set up GitHub Actions or a similar pipeline to automatically build and publish release binaries whenever new features are pushed.
+- **System Integration:** Options to Launch at Login automatically and seamless installation into the `/Applications` folder.
