@@ -59,7 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSettings(_ sender: Any?) {
         if settingsWindow == nil {
             let contentView = SettingsHostingView().environmentObject(configManager)
-            let window = NSWindow(
+            let window = BottomRightAnchoredWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 350, height: 450),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
@@ -78,6 +78,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     public func reloadMenu() {
         constructMenu()
+    }
+}
+
+class BottomRightAnchoredWindow: NSWindow {
+    var isPinningToBottomRight = false
+    var targetMaxX: CGFloat = 0
+    var targetMinY: CGFloat = 0
+    
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        var newRect = frameRect
+        if isPinningToBottomRight {
+            newRect.origin.x = targetMaxX - newRect.width
+            newRect.origin.y = targetMinY
+        }
+        super.setFrame(newRect, display: flag)
+    }
+    
+    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool, animate animateFlag: Bool) {
+        var newRect = frameRect
+        if isPinningToBottomRight {
+            newRect.origin.x = targetMaxX - newRect.width
+            newRect.origin.y = targetMinY
+        }
+        super.setFrame(newRect, display: displayFlag, animate: animateFlag)
     }
 }
 

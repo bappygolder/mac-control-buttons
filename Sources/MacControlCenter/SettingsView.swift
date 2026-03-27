@@ -340,7 +340,7 @@ struct SettingsHostingView: View {
     }
     
     private func toggleViewMode(toMini: Bool) {
-        guard let window = NSApp.windows.first(where: { $0.title == "Mac Control Center" }) else {
+        guard let window = NSApp.windows.first(where: { $0.title == "Mac Control Center" }) as? BottomRightAnchoredWindow else {
             withAnimation { self.settings.isMiniView = toMini }
             return
         }
@@ -348,23 +348,19 @@ struct SettingsHostingView: View {
         let oldMaxX = window.frame.maxX
         let oldMinY = window.frame.minY
         
+        // Enable pinning the origin to bottom-right during resize
+        window.targetMaxX = oldMaxX
+        window.targetMinY = oldMinY
+        window.isPinningToBottomRight = true
+        
         withAnimation(.easeInOut(duration: 0.25)) {
             self.settings.isMiniView = toMini
         }
         
-        let startTime = Date()
-        Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { timer in
-            let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed > 0.3 {
-                timer.invalidate()
-                self.keepWindowOnScreen()
-                return
-            }
-            
-            var currentFrame = window.frame
-            currentFrame.origin.x = oldMaxX - currentFrame.width
-            currentFrame.origin.y = oldMinY
-            window.setFrame(currentFrame, display: true, animate: false)
+        // Disable pinning after animation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            window.isPinningToBottomRight = false
+            self.keepWindowOnScreen()
         }
     }
 }
@@ -413,6 +409,10 @@ struct AddActionSheet: View {
     
     @State private var newName = ""
     @State private var newKey = ""
+    @State private var actionType = "app"
+    @State private var actionTarget = ""
+    
+    let types = ["app", "shell", "none"]
     
     var body: some View {
         VStack(spacing: 20) {
@@ -442,6 +442,17 @@ struct AddActionSheet: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    
+                    Picker("Action Type", selection: $actionType) {
+                        ForEach(types, id: \.self) {
+                            Text($0)
+                        }
+                    }
+                    
+                    if actionType != "none" {
+                        TextField(actionType == "app" ? "App Path" : "Shell Command", text: $actionTarget)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
                 }
             }
             .padding(.horizontal, 4)
@@ -457,7 +468,9 @@ struct AddActionSheet: View {
                 Spacer()
                 
                 Button("Save Action") {
-                    let btn = ActionButton(name: self.newName, key: self.newKey.lowercased())
+                    let typeToSave = self.actionType == "none" ? nil : self.actionType
+                    let targetToSave = self.actionType == "none" ? nil : self.actionTarget
+                    let btn = ActionButton(name: self.newName, key: self.newKey.lowercased(), actionType: typeToSave, actionTarget: targetToSave)
                     self.configManager.buttons.append(btn)
                     self.configManager.save()
                     self.activeSheet = nil
@@ -468,11 +481,11 @@ struct AddActionSheet: View {
                 .background(Color(NSColor.systemBlue))
                 .foregroundColor(.white)
                 .cornerRadius(6)
-                .disabled(newName.isEmpty)
+                .disabled(newName.isEmpty || (actionType != "none" && actionTarget.isEmpty))
             }
         }
         .padding(20)
-        .frame(width: 320)
+        .frame(width: 380) // Slightly wider to fit the new fields comfortably
     }
 }
 

@@ -5,9 +5,11 @@ struct ActionButton: Codable, Identifiable, Hashable {
     var id: UUID = UUID()
     var name: String
     var key: String
+    var actionType: String?
+    var actionTarget: String?
     
     enum CodingKeys: String, CodingKey {
-        case name, key
+        case name, key, actionType, actionTarget
     }
 }
 
@@ -24,8 +26,14 @@ class ConfigManager: ObservableObject {
         // Assuming we run it from the project directory and config.json is there.
         // Actually, we can use the user's home directory or the path where config.json was.
         let fileManager = FileManager.default
-        let currentDir = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-        configURL = currentDir.appendingPathComponent("config.json")
+        let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let configDir = appSupportURL.appendingPathComponent("MacControlCenter")
+        
+        if !fileManager.fileExists(atPath: configDir.path) {
+            try? fileManager.createDirectory(at: configDir, withIntermediateDirectories: true, attributes: nil)
+        }
+        
+        configURL = configDir.appendingPathComponent("config.json")
         load()
     }
     
@@ -33,8 +41,9 @@ class ConfigManager: ObservableObject {
         guard FileManager.default.fileExists(atPath: configURL.path) else {
             // Default config
             buttons = [
-                ActionButton(name: "Start My Day", key: "s"),
-                ActionButton(name: "Post The Next Comment", key: "p")
+                ActionButton(name: "Start My Day", key: "s", actionType: "app", actionTarget: "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/1. Start My Day/1. Start My Day.app"),
+                ActionButton(name: "Post The Next Comment", key: "p", actionType: nil, actionTarget: nil),
+                ActionButton(name: "New Chrome window", key: "c", actionType: "shell", actionTarget: "open -na 'Google Chrome'")
             ]
             save()
             return
@@ -47,7 +56,9 @@ class ConfigManager: ObservableObject {
                 self.buttons = buttonsArray.compactMap { dict in
                     guard let name = dict["name"] as? String else { return nil }
                     let key = dict["key"] as? String ?? ""
-                    return ActionButton(name: name, key: key)
+                    let actionType = dict["actionType"] as? String
+                    let actionTarget = dict["actionTarget"] as? String
+                    return ActionButton(name: name, key: key, actionType: actionType, actionTarget: actionTarget)
                 }
             }
         } catch {
@@ -56,23 +67,16 @@ class ConfigManager: ObservableObject {
     }
     
     func performAction(for button: ActionButton) {
-        if button.name.lowercased() == "start my day" {
-            let appPath = "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/1. Start My Day/1. Start My Day.app"
-            let process = Process()
-            process.launchPath = "/usr/bin/open"
-            process.arguments = ["-a", appPath]
-            process.launch()
-            return
-        }
-        
-        let notification = NSUserNotification()
-        notification.title = "Action Triggered"
-        notification.informativeText = "'\(button.name)'"
-        NSUserNotificationCenter.default.deliver(notification)
+        ActivityHandler.shared.execute(button: button)
     }
     
     func save() {
-        let dictArray = buttons.map { ["name": $0.name, "key": $0.key] }
+        let dictArray = buttons.map { btn -> [String: String] in
+            var dict = ["name": btn.name, "key": btn.key]
+            if let type = btn.actionType { dict["actionType"] = type }
+            if let target = btn.actionTarget { dict["actionTarget"] = target }
+            return dict
+        }
         let saveDict = ["buttons": dictArray]
         do {
             let data = try JSONSerialization.data(withJSONObject: saveDict, options: .prettyPrinted)
