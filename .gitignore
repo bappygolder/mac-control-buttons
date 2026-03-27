@@ -1,0 +1,25 @@
+# macOS / Xcode
+.DS_Store
+build/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# Sensitive data / Secrets
+.env
+.env.*
+*.local
+config.local.json
+keys/
+secrets/
+*.pem
+*.key
+*.cert
+*.p12
+
+# Python (if still around)
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
