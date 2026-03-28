@@ -366,6 +366,7 @@ struct SettingsHostingView: View {
                                 }
                                 .padding(.vertical, 4)
                             }
+                            .frame(maxHeight: 88)
                         }
                     } // closes the VStack
                     .padding(.vertical, 8)
@@ -1066,7 +1067,7 @@ struct QuickLaunchDockView: View {
                         }
                         .buttonStyle(PlainButtonStyle())
                         .background(TooltipView(text: self.apps[index].0))
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                         
                         if index < self.apps.count - 1 {
