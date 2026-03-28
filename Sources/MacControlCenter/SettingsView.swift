@@ -2,6 +2,10 @@ import SwiftUI
 import Cocoa
 
 // ... (AppSettings remains unchanged, inserting later)
+enum ViewMode: String {
+    case expanded, mini, dot
+}
+
 class AppSettings: ObservableObject {
     static let shared = AppSettings()
     
@@ -29,9 +33,9 @@ class AppSettings: ObservableObject {
             toggleLaunchAtLogin(launchAtLogin)
         }
     }
-    @Published var isMiniView: Bool {
+    @Published var viewMode: ViewMode {
         didSet {
-            UserDefaults.standard.set(isMiniView, forKey: "isMiniView")
+            UserDefaults.standard.set(viewMode.rawValue, forKey: "viewModeApp")
         }
     }
     
@@ -40,7 +44,13 @@ class AppSettings: ObservableObject {
         self.showOnAllDesktops = UserDefaults.standard.bool(forKey: "showOnAllDesktops")
         self.opacity = UserDefaults.standard.object(forKey: "opacity") as? Double ?? 1.0
         self.launchAtLogin = UserDefaults.standard.bool(forKey: "launchAtLogin")
-        self.isMiniView = UserDefaults.standard.bool(forKey: "isMiniView")
+        
+        if let modeStr = UserDefaults.standard.string(forKey: "viewModeApp"), let mode = ViewMode(rawValue: modeStr) {
+            self.viewMode = mode
+        } else {
+            let oldIsMini = UserDefaults.standard.bool(forKey: "isMiniView")
+            self.viewMode = oldIsMini ? .mini : .expanded
+        }
     }
     
     func applyWindowSettings() {
@@ -75,18 +85,105 @@ class AppSettings: ObservableObject {
 
 // Global Drag handler overlay for Mini View
 struct WindowDragHandler: NSViewRepresentable {
+    var onClick: (() -> Void)? = nil
+    var interceptsHits: Bool = false
+    
     func makeNSView(context: Context) -> NSView {
         let view = DragView()
+        view.onClick = onClick
+        view.interceptsHits = interceptsHits
         return view
     }
     
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let dragView = nsView as? DragView {
+            dragView.onClick = onClick
+            dragView.interceptsHits = interceptsHits
+        }
+    }
 }
 
 class DragView: NSView {
+    var onClick: (() -> Void)?
+    var dragStarted = false
+    var interceptsHits = false
+    var mouseDownPoint: NSPoint = .zero
     override var acceptsFirstResponder: Bool { true }
+    
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if interceptsHits {
+            return self
+        }
+        return super.hitTest(point)
+    }
+    
     override func mouseDown(with event: NSEvent) {
-        window?.performDrag(with: event)
+        dragStarted = false
+        mouseDownPoint = event.locationInWindow
+    }
+    override func mouseDragged(with event: NSEvent) {
+        if !dragStarted {
+            let dx = event.locationInWindow.x - mouseDownPoint.x
+            let dy = event.locationInWindow.y - mouseDownPoint.y
+            if dx*dx + dy*dy > 9 { // 3 pixels squared
+                dragStarted = true
+            }
+        }
+        if dragStarted {
+            window?.performDrag(with: event)
+        }
+    }
+    override func mouseUp(with event: NSEvent) {
+        if !dragStarted {
+            DispatchQueue.main.async {
+                self.onClick?()
+            }
+        }
+    }
+}
+
+struct ViewModePicker: View {
+    @ObservedObject var settings = AppSettings.shared
+    var action: (ViewMode) -> Void
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: { self.action(.expanded) }) {
+                Text("□")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(settings.viewMode == .expanded ? .white : .secondary)
+                    .frame(width: 30, height: 26)
+                    .background(settings.viewMode == .expanded ? Color.gray.opacity(0.4) : Color.clear)
+                    .cornerRadius(6)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(TooltipView(text: "Expanded View"))
+            
+            Button(action: { self.action(.mini) }) {
+                Text("⧉")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(settings.viewMode == .mini ? .white : .secondary)
+                    .frame(width: 30, height: 26)
+                    .background(settings.viewMode == .mini ? Color.gray.opacity(0.4) : Color.clear)
+                    .cornerRadius(6)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(TooltipView(text: "Mini View"))
+            
+            Button(action: { self.action(.dot) }) {
+                Text("●")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(settings.viewMode == .dot ? .white : .secondary)
+                    .frame(width: 30, height: 26)
+                    .background(settings.viewMode == .dot ? Color.gray.opacity(0.4) : Color.clear)
+                    .cornerRadius(6)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(TooltipView(text: "Dot View"))
+        }
+        .padding(4)
+        .background(Color.gray.opacity(0.15))
+        .cornerRadius(8)
     }
 }
 
@@ -94,50 +191,111 @@ struct SettingsHostingView: View {
     @EnvironmentObject var configManager: ConfigManager
     @ObservedObject var settings = AppSettings.shared
     
-    enum ActiveSheet: Identifiable {
-        case add
-        var id: Int { hashValue }
-    }
-    
     @State private var isEditing = false
     @State private var activeSheet: ActiveSheet?
     @State private var showingInlineSettings = false
+    @State private var isAddingAction = false
+    @State private var isHoveringDot = false
+    @State private var ignoreHoverUntilExit = false
+    
+    var effectiveViewMode: ViewMode {
+        return settings.viewMode
+    }
+    
+    private func applyWindowDecorations() {
+        guard let window = NSApp.windows.first(where: { $0.title == "Mac Control Center" }) else { return }
+        let shouldBeBorderless = (effectiveViewMode == .dot)
+        
+        if shouldBeBorderless {
+            window.styleMask = .borderless
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            
+            // Crush window frame mechanically down to the exact dot boundaries!
+            let targetSize = CGSize(width: 80, height: 80)
+            if window.frame.width > 100 {
+                let newFrame = NSRect(x: window.frame.maxX - targetSize.width, 
+                                      y: window.frame.minY, 
+                                      width: targetSize.width, 
+                                      height: targetSize.height)
+                window.setFrame(newFrame, display: true, animate: false)
+            }
+            
+        } else {
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.titleVisibility = .hidden
+            window.isOpaque = true
+            window.backgroundColor = NSColor.windowBackgroundColor
+            window.hasShadow = true
+            window.standardWindowButton(.closeButton)?.isHidden = true
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            window.standardWindowButton(.zoomButton)?.isHidden = true
+            
+            // Restore window bounds explicitly for Expanded/Mini
+            let targetWidth: CGFloat = (effectiveViewMode == .mini) ? 180 : 350
+            if window.frame.width < 150 {
+                let targetHeight: CGFloat = (effectiveViewMode == .mini) ? 280 : 450
+                let newFrame = NSRect(x: window.frame.maxX - targetWidth, 
+                                      y: window.frame.minY, 
+                                      width: targetWidth, 
+                                      height: targetHeight)
+                window.setFrame(newFrame, display: true, animate: false)
+            }
+        }
+    }
     
     var body: some View {
         ZStack {
-            if settings.isMiniView {
+            if effectiveViewMode == .dot {
+                // DOT VIEW
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.001)) // Invisible hit box that routes correctly
+                        .frame(width: 80, height: 80)     // Large tap target around dot
+                        
+                    Circle()
+                        .fill(Color(NSColor.systemBlue).opacity(0.9))
+                        .frame(width: 16, height: 16)
+                }
+                .background(WindowDragHandler(onClick: {
+                    self.toggleViewMode(to: .mini)
+                }, interceptsHits: true))
+                .onTapGesture {
+                    self.toggleViewMode(to: .mini)
+                }
+                
+            } else if effectiveViewMode == .mini {
                 // TRUE MINI VIEW
                 VStack(spacing: 0) {
                     // Header with Menu and Expand
                     HStack(alignment: .center, spacing: 6) {
-                        Button(action: { 
-                            self.toggleViewMode(toMini: false)
-                        }) {
-                            Text("Expand")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.primary)
-                                .padding(.horizontal, 10)
-                                .frame(height: 24)
-                                .background(Color.gray.opacity(0.15))
-                                .cornerRadius(6)
-                        }.buttonStyle(PlainButtonStyle())
-                        
-                        Button(action: {
-                            self.settings.alwaysOnTop.toggle()
-                        }) {
-                            Text("Top")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(settings.alwaysOnTop ? .white : .primary)
-                                .padding(.horizontal, 10)
-                                .frame(height: 24)
-                                .background(settings.alwaysOnTop ? Color.gray.opacity(0.6) : Color.gray.opacity(0.15))
-                                .cornerRadius(6)
-                        }.buttonStyle(PlainButtonStyle())
+                        // Left side Top button group
+                        HStack(spacing: 4) {
+                            Button(action: { self.settings.alwaysOnTop.toggle() }) {
+                                Text("Top")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(settings.alwaysOnTop ? .white : .primary)
+                                    .frame(width: 36, height: 26)
+                                    .background(settings.alwaysOnTop ? Color.gray.opacity(0.5) : Color.gray.opacity(0.15))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .background(TooltipView(text: "Always on Top"))
+                        }
+                        .padding(4)
+                        .background(Color.gray.opacity(0.15))
+                        .cornerRadius(8)
                         
                         Spacer()
+                        
+                        // Right-side View Mode Picker
+                        ViewModePicker { mode in
+                            self.toggleViewMode(to: mode)
+                        }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
                     .background(WindowDragHandler())
                     .background(Color(NSColor.windowBackgroundColor))
                     
@@ -149,25 +307,31 @@ struct SettingsHostingView: View {
                                 .frame(maxHeight: 250)
                         } else {
                             ForEach(configManager.buttons.indices, id: \.self) { index in
-                                Button(action: {
-                                    self.configManager.performAction(for: self.configManager.buttons[index])
-                                }) {
-                                    HStack {
-                                        Text(self.configManager.buttons[index].name
-                                            .replacingOccurrences(of: "Post The Next Comment", with: "Post next comment")
-                                            .uppercased())
-                                            .font(.system(size: 11, weight: .regular))
+                                HStack(alignment: .center, spacing: 8) {
+                                    Text(self.configManager.buttons[index].name)
+                                        .font(.system(size: 11, weight: .regular))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .background(TooltipView(text: self.configManager.buttons[index].name))
+                                    
+                                    Spacer()
+                                    
+                                    Button(action: {
+                                        self.configManager.performAction(for: self.configManager.buttons[index])
+                                    }) {
+                                        Text("Run")
+                                            .font(.system(size: 11, weight: .medium))
                                             .foregroundColor(.white)
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .frame(maxWidth: .infinity, minHeight: 30)
-                                    .background(Color(NSColor.systemBlue))
-                                    .cornerRadius(6)
+                                            .frame(width: 44, height: 20)
+                                            .background(Color.gray.opacity(0.4))
+                                            .cornerRadius(10)
+                                    }.buttonStyle(PlainButtonStyle())
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(6)
                                 .padding(.horizontal, 12)
                             }
                         }
@@ -179,56 +343,113 @@ struct SettingsHostingView: View {
                 }
                 .frame(width: 180)
                 .background(Color(NSColor.windowBackgroundColor))
+                .onHover { hovering in
+                    if self.settings.viewMode == .dot {
+                        self.setHoveringDot(hovering)
+                    }
+                }
                 
             } else {
                 // NORMAL NATIVE VIEW (Phase 2 style)
                 VStack(spacing: 0) {
                     // Toolbar
-                    HStack(spacing: 8) {
-                        if !showingInlineSettings {
-                            Button(action: { self.toggleViewMode(toMini: true) }) {
-                                Text("Mini View")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 24)
-                                    .background(Color.gray.opacity(0.15))
+                    HStack(spacing: 6) {
+                        // Left-side Settings Buttons
+                        // If we are in editing/settings, only show Done to save space
+                        if showingInlineSettings {
+                            Button(action: { withAnimation { self.showingInlineSettings.toggle() } }) {
+                                Text("Done")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 50, height: 26)
+                                    .background(Color.gray.opacity(0.4))
                                     .cornerRadius(6)
-                            }.buttonStyle(PlainButtonStyle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        } else if isAddingAction {
+                            Button(action: { withAnimation { self.isAddingAction.toggle() } }) {
+                                Text("Done")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 50, height: 26)
+                                    .background(Color.gray.opacity(0.4))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        } else if isEditing {
+                            Spacer() // Empty space on the left when editing
+                        } else {
+                            HStack(spacing: 4) {
+                                Button(action: { withAnimation { self.isAddingAction.toggle() } }) {
+                                    Text("+")
+                                        .font(.system(size: 16, weight: .regular))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 28, height: 26)
+                                        .background(Color.gray.opacity(0.15))
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .background(TooltipView(text: "Add Action"))
+                                
+                                Button(action: { withAnimation { self.showingInlineSettings.toggle() } }) {
+                                    Text("⚙")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 28, height: 26)
+                                        .background(Color.gray.opacity(0.15))
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .background(TooltipView(text: "Settings"))
+                                
+                                Button(action: { self.isEditing.toggle() }) {
+                                    Text("Edit")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 36, height: 26)
+                                        .background(Color.gray.opacity(0.15))
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .background(TooltipView(text: "Edit Actions"))
+                                
+                                Button(action: { self.settings.alwaysOnTop.toggle() }) {
+                                    Text("Top")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(settings.alwaysOnTop ? .white : .primary)
+                                        .frame(width: 36, height: 26)
+                                        .background(settings.alwaysOnTop ? Color.gray.opacity(0.5) : Color.gray.opacity(0.15))
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .background(TooltipView(text: "Always on Top"))
+                            }
+                            .padding(4)
+                            .background(Color.gray.opacity(0.15))
+                            .cornerRadius(8)
                         }
                         
-                        Spacer()
+                        // Right side elements
+                        if !isEditing { Spacer() }
                         
-                        Button(action: { withAnimation { self.showingInlineSettings.toggle() } }) {
-                            Text(showingInlineSettings ? "Done" : "⚙")
-                                .font(.system(size: 12, weight: .medium))
-                                .frame(height: 24)
-                                .padding(.horizontal, 10)
-                                .background(Color.gray.opacity(0.15))
-                                .cornerRadius(6)
-                        }.buttonStyle(PlainButtonStyle())
-                        
-                        if !showingInlineSettings {
+                        if !showingInlineSettings && !isAddingAction && !isEditing {
+                            ViewModePicker { mode in
+                                self.toggleViewMode(to: mode)
+                            }
+                        } else if isEditing {
                             Button(action: { self.isEditing.toggle() }) {
-                                Text(isEditing ? "Done" : "Edit")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .frame(height: 24)
-                                    .padding(.horizontal, 10)
-                                    .background(Color.gray.opacity(0.15))
-                                    .cornerRadius(6)
-                            }.buttonStyle(PlainButtonStyle())
-                            
-                            Button(action: { self.activeSheet = .add }) {
-                                Text("+")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .frame(width: 28, height: 24)
-                                    .background(Color.gray.opacity(0.15))
+                                Text("Done")
+                                    .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.primary)
+                                    .frame(width: 50, height: 26)
+                                    .background(Color.gray.opacity(0.4))
                                     .cornerRadius(6)
-                            }.buttonStyle(PlainButtonStyle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                     .background(Color(NSColor.windowBackgroundColor))
                     
                     Divider()
@@ -236,22 +457,37 @@ struct SettingsHostingView: View {
                     if showingInlineSettings {
                         InlineSettingsView(isMiniView: false)
                             .background(Color(NSColor.underPageBackgroundColor))
+                    } else if isAddingAction {
+                        InlineAddActionView(isAddingAction: $isAddingAction)
+                            .background(Color(NSColor.underPageBackgroundColor))
                     } else {
                         // List
                         List {
                             ForEach(configManager.buttons.indices, id: \.self) { index in
-                                HStack(alignment: .center, spacing: 12) {
+                                HStack(alignment: .center, spacing: 8) {
                                     if self.isEditing {
+                                        Text("≡")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.gray)
+                                            .frame(width: 22, height: 22, alignment: .center)
+                                            
+                                        Button(action: {
+                                            self.activeSheet = .edit(index)
+                                        }) {
+                                            Text("✎")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.gray)
+                                                .frame(width: 22, height: 22, alignment: .center)
+                                        }.buttonStyle(PlainButtonStyle())
+                                            
                                         Button(action: {
                                             self.configManager.buttons.remove(at: index)
                                             self.configManager.save()
                                         }) {
-                                            Text("一")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundColor(.white)
-                                                .frame(width: 18, height: 18)
-                                                .background(Color.red)
-                                                .clipShape(Circle())
+                                            Text("✕")
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundColor(.red)
+                                                .frame(width: 22, height: 22, alignment: .center)
                                         }.buttonStyle(PlainButtonStyle())
                                     }
                                     
@@ -277,11 +513,9 @@ struct SettingsHostingView: View {
                                                 .font(.system(size: 12, weight: .medium))
                                                 .foregroundColor(.white)
                                                 .frame(width: 50, height: 22)
-                                                .background(Color(NSColor.systemBlue))
+                                                .background(Color.gray.opacity(0.4))
                                                 .cornerRadius(11)
                                         }.buttonStyle(PlainButtonStyle())
-                                    } else {
-                                        Text("≡").font(.system(size: 16)).foregroundColor(.gray)
                                     }
                                 }
                                 .padding(.vertical, 4)
@@ -295,6 +529,16 @@ struct SettingsHostingView: View {
                     }
                 }
                 .frame(minWidth: 300, idealWidth: 350, minHeight: 350, idealHeight: 450)
+                .onHover { hovering in
+                    if self.settings.viewMode == .dot {
+                        self.setHoveringDot(hovering)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.applyWindowDecorations()
             }
         }
         .sheet(item: $activeSheet) { item in
@@ -302,10 +546,19 @@ struct SettingsHostingView: View {
         }
     }
     
+    enum ActiveSheet: Identifiable {
+        case edit(Int)
+        var id: Int {
+            switch self {
+            case .edit(let idx): return idx
+            }
+        }
+    }
+    
     private func sheetView(for item: ActiveSheet) -> AnyView {
         switch item {
-        case .add:
-            return AnyView(AddActionSheet(activeSheet: self.$activeSheet))
+        case .edit(let index):
+            return AnyView(EditActionSheet(activeSheet: self.$activeSheet, index: index))
         }
     }
     
@@ -339,9 +592,18 @@ struct SettingsHostingView: View {
         }
     }
     
-    private func toggleViewMode(toMini: Bool) {
+    private func setHoveringDot(_ hovering: Bool) {
+        // Redundant with the pulse animation now, but keeping for structural safety
+    }
+    
+    private func toggleViewMode(to mode: ViewMode) {
+        if mode == .dot {
+            self.ignoreHoverUntilExit = true
+            self.isHoveringDot = false
+        }
+        
         guard let window = NSApp.windows.first(where: { $0.title == "Mac Control Center" }) as? BottomRightAnchoredWindow else {
-            withAnimation { self.settings.isMiniView = toMini }
+            withAnimation { self.settings.viewMode = mode }
             return
         }
         
@@ -353,12 +615,13 @@ struct SettingsHostingView: View {
         window.targetMinY = oldMinY
         window.isPinningToBottomRight = true
         
-        withAnimation(.easeInOut(duration: 0.25)) {
-            self.settings.isMiniView = toMini
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.settings.viewMode = mode
+            self.applyWindowDecorations()
         }
         
         // Disable pinning after animation completes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             window.isPinningToBottomRight = false
             self.keepWindowOnScreen()
         }
@@ -403,9 +666,9 @@ struct InlineSettingsView: View {
     }
 }
 
-struct AddActionSheet: View {
+struct InlineAddActionView: View {
     @EnvironmentObject var configManager: ConfigManager
-    @Binding var activeSheet: SettingsHostingView.ActiveSheet?
+    @Binding var isAddingAction: Bool
     
     @State private var newName = ""
     @State private var newKey = ""
@@ -415,24 +678,141 @@ struct AddActionSheet: View {
     let types = ["app", "shell", "none"]
     
     var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Text("Create New Action")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                
+                VStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Action Name").font(.caption).foregroundColor(.secondary)
+                        TextField("e.g. Start My Day", text: $newName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Shortcut Key").font(.caption).foregroundColor(.secondary)
+                            TextField("Key", text: Binding<String>(
+                                get: { self.newKey },
+                                set: { newValue in
+                                    if newValue.count > 1 {
+                                        self.newKey = String(newValue.suffix(1)).lowercased()
+                                    } else {
+                                        self.newKey = newValue.lowercased()
+                                    }
+                                }
+                            ))
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .frame(width: 80)
+                        }
+                        
+                        Text("Triggers via Cmd + [Key]")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 16)
+                            
+                        Spacer()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Action Type").font(.caption).foregroundColor(.secondary)
+                        Picker("", selection: $actionType) {
+                            ForEach(types, id: \.self) { Text($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    
+                    if actionType != "none" {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(actionType == "app" ? "App Path" : "Shell Command").font(.caption).foregroundColor(.secondary)
+                            TextField(actionType == "app" ? "/Applications/Safari.app" : "echo 'Hello'", text: $actionTarget)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+                
+                HStack {
+                    Button("Cancel") { withAnimation { self.isAddingAction = false } }
+                        .buttonStyle(PlainButtonStyle())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.gray.opacity(0.15))
+                        .cornerRadius(6)
+                    
+                    Spacer()
+                    
+                    Button("Save Action") {
+                        let typeToSave = self.actionType == "none" ? nil : self.actionType
+                        let targetToSave = self.actionType == "none" ? nil : self.actionTarget
+                        let btn = ActionButton(name: self.newName, key: self.newKey.lowercased(), actionType: typeToSave, actionTarget: targetToSave)
+                        self.configManager.buttons.append(btn)
+                        self.configManager.save()
+                        withAnimation { self.isAddingAction = false }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(NSColor.systemBlue))
+                    .foregroundColor(.white)
+                    .cornerRadius(6)
+                    .disabled(newName.isEmpty || (actionType != "none" && actionTarget.isEmpty))
+                }
+            }
+            .padding(20)
+        }
+    }
+}
+
+struct TooltipView: NSViewRepresentable {
+    let text: String
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.toolTip = text
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.toolTip = text
+    }
+}
+
+struct EditActionSheet: View {
+    @EnvironmentObject var configManager: ConfigManager
+    @Binding var activeSheet: SettingsHostingView.ActiveSheet?
+    let index: Int
+    
+    @State private var editName = ""
+    @State private var editKey = ""
+    @State private var actionType = "app"
+    @State private var actionTarget = ""
+    
+    let types = ["app", "shell", "none"]
+    
+    var body: some View {
         VStack(spacing: 20) {
-            Text("Create New Action")
+            Text("Edit Action")
                 .font(.system(size: 14, weight: .semibold))
                 .padding(.top, 4)
             
             Form {
                 Section {
-                    TextField("Action Name (e.g. Start My Day)", text: $newName)
+                    TextField("Action Name", text: $editName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                     
                     HStack {
                         TextField("Shortcut Key", text: Binding<String>(
-                            get: { self.newKey },
+                            get: { self.editKey },
                             set: { newValue in
                                 if newValue.count > 1 {
-                                    self.newKey = String(newValue.suffix(1)).lowercased()
+                                    self.editKey = String(newValue.suffix(1)).lowercased()
                                 } else {
-                                    self.newKey = newValue.lowercased()
+                                    self.editKey = newValue.lowercased()
                                 }
                             }
                         ))
@@ -467,37 +847,36 @@ struct AddActionSheet: View {
                 
                 Spacer()
                 
-                Button("Save Action") {
+                Button("Save Changes") {
                     let typeToSave = self.actionType == "none" ? nil : self.actionType
                     let targetToSave = self.actionType == "none" ? nil : self.actionTarget
-                    let btn = ActionButton(name: self.newName, key: self.newKey.lowercased(), actionType: typeToSave, actionTarget: targetToSave)
-                    self.configManager.buttons.append(btn)
+                    var btn = self.configManager.buttons[self.index]
+                    btn.name = self.editName
+                    btn.key = self.editKey.lowercased()
+                    btn.actionType = typeToSave
+                    btn.actionTarget = targetToSave
+                    self.configManager.buttons[self.index] = btn
                     self.configManager.save()
                     self.activeSheet = nil
                 }
                 .buttonStyle(PlainButtonStyle())
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
-                .background(Color(NSColor.systemBlue))
+                .background(Color.gray.opacity(0.4))
                 .foregroundColor(.white)
                 .cornerRadius(6)
-                .disabled(newName.isEmpty || (actionType != "none" && actionTarget.isEmpty))
+                .disabled(editName.isEmpty || (actionType != "none" && actionTarget.isEmpty))
             }
         }
         .padding(20)
-        .frame(width: 380) // Slightly wider to fit the new fields comfortably
-    }
-}
-
-struct TooltipView: NSViewRepresentable {
-    let text: String
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.toolTip = text
-        return view
-    }
-    func updateNSView(_ nsView: NSView, context: Context) {
-        nsView.toolTip = text
+        .frame(width: 380)
+        .onAppear {
+            let btn = self.configManager.buttons[self.index]
+            self.editName = btn.name
+            self.editKey = btn.key
+            self.actionType = btn.actionType ?? "none"
+            self.actionTarget = btn.actionTarget ?? ""
+        }
     }
 }
 

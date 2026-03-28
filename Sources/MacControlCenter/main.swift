@@ -31,6 +31,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startItem.target = self
         menu.addItem(startItem)
         
+        let resetItem = NSMenuItem(title: "Reset Size (Debug)", action: #selector(resetSize(_:)), keyEquivalent: "r")
+        resetItem.target = self
+        menu.addItem(resetItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         for button in configManager.buttons {
@@ -54,6 +58,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = sender.representedObject as? ActionButton else { return }
         
         configManager.performAction(for: button)
+    }
+    
+    @objc func resetSize(_ sender: Any?) {
+        AppSettings.shared.viewMode = .expanded
+        if let window = settingsWindow {
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.isOpaque = true
+            window.hasShadow = true
+            if window.frame.width < 150 {
+                let newFrame = NSRect(x: window.frame.maxX - 350, y: window.frame.minY, width: 350, height: 450)
+                window.setFrame(newFrame, display: true, animate: true)
+            }
+        }
+        openSettings(nil)
     }
     
     @objc func openSettings(_ sender: Any?) {

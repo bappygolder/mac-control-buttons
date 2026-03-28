@@ -28,4 +28,11 @@ Once built (even without installing), you can open the locally built app bundle 
 open "build/MacControlCenter.app"
 ```
 
-Whenever you are instructed to verify the app or test changes, you should compile the source files using the bash script above.
+## Development Workflow: Always Re-run
+CRITICAL AI GUIDELINE: Every single time significant improvements or code updates are made, you **MUST** automatically close the existing running application, rebuild it, and re-run it. 
+Do not develop in isolated phases without testing. Always perform the following cycle after making updates:
+1. Kill the existing run: `pkill -f MacControlCenter` (or close it gracefully if possible).
+2. Rebuild: `./build.sh`
+3. Re-run: `open "build/MacControlCenter.app"`
+
+This ensures that the app is constantly tested and verified. Make this a continuous and automatic habit during development.
