@@ -109,6 +109,10 @@ class DragView: NSView {
     var interceptsHits = false
     var mouseDownPoint: NSPoint = .zero
     override var acceptsFirstResponder: Bool { true }
+    override var focusRingType: NSFocusRingType {
+        get { .none }
+        set {}
+    }
     
     override func hitTest(_ point: NSPoint) -> NSView? {
         if interceptsHits {
@@ -198,6 +202,8 @@ struct SettingsHostingView: View {
     @State private var isHoveringDot = false
     @State private var ignoreHoverUntilExit = false
     
+    @State private var localKeyMonitor: Any?
+    
     var effectiveViewMode: ViewMode {
         return settings.viewMode
     }
@@ -223,24 +229,45 @@ struct SettingsHostingView: View {
             }
             
         } else {
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isOpaque = true
             window.backgroundColor = NSColor.windowBackgroundColor
             window.hasShadow = true
-            window.standardWindowButton(.closeButton)?.isHidden = true
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            window.standardWindowButton(.zoomButton)?.isHidden = true
             
             // Restore window bounds explicitly for Expanded/Mini
+            var targetHeight: CGFloat = 450
+            let buttonCount = configManager.buttons.count
+            
+            if effectiveViewMode == .mini {
+                let listH = CGFloat(buttonCount * 40)
+                targetHeight = showingInlineSettings ? 330 : max(150, min(75 + listH + 50, 280))
+            } else {
+                let listH = CGFloat(buttonCount * 40)
+                targetHeight = (showingInlineSettings || isAddingAction || isEditing) ? 450 : max(200, min(75 + listH + 60, 600))
+            }
+            
             let targetWidth: CGFloat = (effectiveViewMode == .mini) ? 180 : 350
-            if window.frame.width < 150 {
-                let targetHeight: CGFloat = (effectiveViewMode == .mini) ? 280 : 450
-                let newFrame = NSRect(x: window.frame.maxX - targetWidth, 
-                                      y: window.frame.minY, 
-                                      width: targetWidth, 
-                                      height: targetHeight)
-                window.setFrame(newFrame, display: true, animate: false)
+            
+            // Adjust frame using custom pinning if possible to prevent jumping
+            if let anchoredWin = window as? BottomRightAnchoredWindow {
+                anchoredWin.targetMaxX = window.frame.maxX
+                anchoredWin.targetMinY = window.frame.minY
+                anchoredWin.isPinningToBottomRight = true
+            }
+
+            let newFrame = NSRect(x: window.frame.maxX - targetWidth, 
+                                  y: window.frame.maxY - targetHeight, // Origin Y recalculation to pin to top left or bottom? Actually bottom right is pinned. So maxY should change? Wait, BottomRightAnchoredWindow pins based on setFrame logic.
+                                  width: targetWidth, 
+                                  height: targetHeight)
+            window.setFrame(newFrame, display: true, animate: true)
+            
+            if let anchoredWin = window as? BottomRightAnchoredWindow {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    anchoredWin.isPinningToBottomRight = false
+                    self.keepWindowOnScreen()
+                }
             }
         }
     }
@@ -306,38 +333,47 @@ struct SettingsHostingView: View {
                             InlineSettingsView(isMiniView: true)
                                 .frame(maxHeight: 250)
                         } else {
-                            ForEach(configManager.buttons.indices, id: \.self) { index in
-                                HStack(alignment: .center, spacing: 8) {
-                                    Text(self.configManager.buttons[index].name)
-                                        .font(.system(size: 11, weight: .regular))
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .background(TooltipView(text: self.configManager.buttons[index].name))
-                                    
-                                    Spacer()
-                                    
-                                    Button(action: {
-                                        self.configManager.performAction(for: self.configManager.buttons[index])
-                                    }) {
-                                        Text("Run")
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundColor(.white)
-                                            .frame(width: 44, height: 20)
-                                            .background(Color.gray.opacity(0.4))
-                                            .cornerRadius(10)
-                                    }.buttonStyle(PlainButtonStyle())
+                            ScrollView {
+                                VStack(spacing: 8) {
+                                    ForEach(configManager.buttons.indices, id: \.self) { index in
+                                        HStack(alignment: .center, spacing: 8) {
+                                            Text(self.configManager.buttons[index].name)
+                                                .font(.system(size: 11, weight: .regular))
+                                                .foregroundColor(.primary)
+                                                .lineLimit(1)
+                                                .truncationMode(.tail)
+                                                .background(TooltipView(text: self.configManager.buttons[index].name))
+                                            
+                                            Spacer()
+                                            
+                                            Button(action: {
+                                                self.configManager.performAction(for: self.configManager.buttons[index])
+                                            }) {
+                                                Text("Run")
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundColor(.white)
+                                                    .frame(width: 44, height: 20)
+                                                    .background(Color.gray.opacity(0.4))
+                                                    .cornerRadius(10)
+                                            }.buttonStyle(PlainButtonStyle())
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(6)
+                                        .padding(.horizontal, 12)
+                                    }
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(6)
-                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
                             }
                         }
                     } // closes the VStack
                     .padding(.vertical, 8)
                     .background(Color(NSColor.underPageBackgroundColor))
+                    
+                    if !showingInlineSettings {
+                        QuickLaunchDockView()
+                    }
                     
                     Spacer().frame(height: 4) // Bottom padding
                 }
@@ -357,7 +393,7 @@ struct SettingsHostingView: View {
                         // Left-side Settings Buttons
                         // If we are in editing/settings, only show Done to save space
                         if showingInlineSettings {
-                            Button(action: { withAnimation { self.showingInlineSettings.toggle() } }) {
+                            Button(action: { withAnimation { self.showingInlineSettings.toggle(); self.applyWindowDecorations() } }) {
                                 Text("Done")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.primary)
@@ -367,7 +403,7 @@ struct SettingsHostingView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         } else if isAddingAction {
-                            Button(action: { withAnimation { self.isAddingAction.toggle() } }) {
+                            Button(action: { withAnimation { self.isAddingAction.toggle(); self.applyWindowDecorations() } }) {
                                 Text("Done")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.primary)
@@ -380,7 +416,7 @@ struct SettingsHostingView: View {
                             Spacer() // Empty space on the left when editing
                         } else {
                             HStack(spacing: 4) {
-                                Button(action: { withAnimation { self.isAddingAction.toggle() } }) {
+                                Button(action: { withAnimation { self.isAddingAction.toggle(); self.applyWindowDecorations() } }) {
                                     Text("+")
                                         .font(.system(size: 16, weight: .regular))
                                         .foregroundColor(.primary)
@@ -391,7 +427,7 @@ struct SettingsHostingView: View {
                                 .buttonStyle(PlainButtonStyle())
                                 .background(TooltipView(text: "Add Action"))
                                 
-                                Button(action: { withAnimation { self.showingInlineSettings.toggle() } }) {
+                                Button(action: { withAnimation { self.showingInlineSettings.toggle(); self.applyWindowDecorations() } }) {
                                     Text("⚙")
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundColor(.primary)
@@ -402,7 +438,7 @@ struct SettingsHostingView: View {
                                 .buttonStyle(PlainButtonStyle())
                                 .background(TooltipView(text: "Settings"))
                                 
-                                Button(action: { self.isEditing.toggle() }) {
+                                Button(action: { self.isEditing.toggle(); self.applyWindowDecorations() }) {
                                     Text("Edit")
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundColor(.primary)
@@ -437,7 +473,7 @@ struct SettingsHostingView: View {
                                 self.toggleViewMode(to: mode)
                             }
                         } else if isEditing {
-                            Button(action: { self.isEditing.toggle() }) {
+                            Button(action: { self.isEditing.toggle(); self.applyWindowDecorations() }) {
                                 Text("Done")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.primary)
@@ -527,8 +563,12 @@ struct SettingsHostingView: View {
                         }
                         .background(Color(NSColor.underPageBackgroundColor))
                     }
+                    
+                    if !showingInlineSettings && !isAddingAction {
+                        QuickLaunchDockView()
+                    }
                 }
-                .frame(minWidth: 300, idealWidth: 350, minHeight: 350, idealHeight: 450)
+                .frame(minWidth: 300, idealWidth: 350)
                 .onHover { hovering in
                     if self.settings.viewMode == .dot {
                         self.setHoveringDot(hovering)
@@ -540,6 +580,27 @@ struct SettingsHostingView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.applyWindowDecorations()
             }
+            
+            if self.localKeyMonitor == nil {
+                self.localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    if event.modifierFlags.contains([.command, .control]) {
+                        if event.charactersIgnoringModifiers?.lowercased() == "l" {
+                            self.toggleViewMode(to: .expanded)
+                            return nil // Handled
+                        } else if event.charactersIgnoringModifiers?.lowercased() == "m" {
+                            self.toggleViewMode(to: .mini)
+                            return nil // Handled
+                        } else if event.charactersIgnoringModifiers?.lowercased() == "s" {
+                            self.toggleViewMode(to: .dot)
+                            return nil
+                        }
+                    }
+                    return event
+                }
+            }
+        }
+        .onReceive(configManager.$buttons) { _ in
+            DispatchQueue.main.async { self.applyWindowDecorations() }
         }
         .sheet(item: $activeSheet) { item in
             self.sheetView(for: item)
@@ -628,40 +689,88 @@ struct SettingsHostingView: View {
     }
 }
 
+enum SettingsTab: String, CaseIterable {
+    case general = "General"
+    case shortcuts = "Shortcuts"
+}
+
 struct InlineSettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     var isMiniView: Bool
+    @State private var selectedTab: SettingsTab = .general
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: isMiniView ? 14 : 20) {
-                // Preferences section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Preferences").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
-                    
-                    Toggle("Always on Top", isOn: $settings.alwaysOnTop)
-                    Toggle("Show on All Desktops", isOn: $settings.showOnAllDesktops)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Opacity: \(Int(settings.opacity * 100))%")
-                        Slider(value: $settings.opacity, in: 0.2...1.0)
-                    }
-                    
-                    Toggle("Launch on Startup", isOn: $settings.launchAtLogin)
-                }
-                .font(.system(size: 13))
-                
-                Divider()
-                
-                // About section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("About").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
-                    Text("⚡ Mac Control Center").font(.system(size: 14, weight: .bold))
-                    Text("Version 2.0 (Native Swift)").font(.system(size: 11)).foregroundColor(.secondary)
-                    Text("Built by Bappy Golder").font(.system(size: 11))
+        VStack(spacing: 0) {
+            Picker("", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
                 }
             }
-            .padding(isMiniView ? 12 : 20)
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            
+            Divider()
+            
+            ScrollView {
+                if selectedTab == .general {
+                    VStack(alignment: .leading, spacing: isMiniView ? 14 : 20) {
+                        // Preferences section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Preferences").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                            
+                            Toggle("Always on Top", isOn: $settings.alwaysOnTop)
+                            Toggle("Show on All Desktops", isOn: $settings.showOnAllDesktops)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Opacity: \(Int(settings.opacity * 100))%")
+                                Slider(value: $settings.opacity, in: 0.2...1.0)
+                            }
+                            
+                            Toggle("Launch on Startup", isOn: $settings.launchAtLogin)
+                        }
+                        .font(.system(size: 13))
+                        
+                        Divider()
+                        
+                        // About section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("About").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                            Text("⚡ Mac Control Center").font(.system(size: 14, weight: .bold))
+                            Text("Version 2.0 (Native Swift)").font(.system(size: 11)).foregroundColor(.secondary)
+                            Text("Built by Bappy Golder").font(.system(size: 11))
+                        }
+                    }
+                    .padding(isMiniView ? 12 : 20)
+                } else {
+                    // Shortcuts Tab
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Keyboard Navigation").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack { Text("Ctrl + Cmd + L").bold(); Spacer(); Text("Expanded View") }
+                            HStack { Text("Ctrl + Cmd + M").bold(); Spacer(); Text("Mini View") }
+                            HStack { Text("Ctrl + Cmd + S").bold(); Spacer(); Text("Dot View") }
+                        }
+                        .font(.system(size: 11))
+                        .foregroundColor(.primary)
+                        
+                        Divider().padding(.vertical, 4)
+                        
+                        Text("Window Toggles").font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack { Text("Ctrl + Cmd + T").bold(); Spacer(); Text("Toggle Always on Top") }
+                            HStack { Text("Ctrl + Cmd + D").bold(); Spacer(); Text("Toggle All Desktops") }
+                            HStack { Text("Cmd + ,").bold(); Spacer(); Text("Toggle Settings Menu") }
+                        }
+                        .font(.system(size: 11))
+                        .foregroundColor(.primary)
+                    }
+                    .padding(isMiniView ? 12 : 20)
+                }
+            }
         }
     }
 }
@@ -679,7 +788,7 @@ struct InlineAddActionView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 Text("Create New Action")
                     .font(.system(size: 14, weight: .bold))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -720,7 +829,9 @@ struct InlineAddActionView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Action Type").font(.caption).foregroundColor(.secondary)
                         Picker("", selection: $actionType) {
-                            ForEach(types, id: \.self) { Text($0) }
+                            Text("App").tag("app")
+                            Text("Script").tag("shell")
+                            Text("None").tag("none")
                         }
                         .labelsHidden()
                         .pickerStyle(SegmentedPickerStyle())
@@ -729,20 +840,41 @@ struct InlineAddActionView: View {
                     if actionType != "none" {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(actionType == "app" ? "App Path" : "Shell Command").font(.caption).foregroundColor(.secondary)
-                            TextField(actionType == "app" ? "/Applications/Safari.app" : "echo 'Hello'", text: $actionTarget)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            
+                            HStack {
+                                TextField(actionType == "app" ? "/Applications/Google Chrome.app" : "echo 'Hello'", text: $actionTarget)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                
+                                if actionType == "app" {
+                                    Button("Browse...") {
+                                        let panel = NSOpenPanel()
+                                        panel.canChooseFiles = true
+                                        panel.canChooseDirectories = false
+                                        panel.allowsMultipleSelection = false
+                                        panel.allowedFileTypes = ["app"]
+                                        if panel.runModal() == .OK {
+                                            self.actionTarget = panel.url?.path ?? ""
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.gray.opacity(0.15))
+                                    .cornerRadius(6)
+                                }
+                            }
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(8)
                 
                 HStack {
                     Button("Cancel") { withAnimation { self.isAddingAction = false } }
                         .buttonStyle(PlainButtonStyle())
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(Color.gray.opacity(0.15))
                         .cornerRadius(6)
                     
@@ -757,15 +889,15 @@ struct InlineAddActionView: View {
                         withAnimation { self.isAddingAction = false }
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                     .background(Color(NSColor.systemBlue))
                     .foregroundColor(.white)
                     .cornerRadius(6)
                     .disabled(newName.isEmpty || (actionType != "none" && actionTarget.isEmpty))
                 }
             }
-            .padding(20)
+            .padding(16)
         }
     }
 }
@@ -824,14 +956,30 @@ struct EditActionSheet: View {
                     }
                     
                     Picker("Action Type", selection: $actionType) {
-                        ForEach(types, id: \.self) {
-                            Text($0)
-                        }
+                        Text("Application").tag("app")
+                        Text("Command / Script").tag("shell")
+                        Text("No Action").tag("none")
                     }
+                    .pickerStyle(SegmentedPickerStyle())
                     
                     if actionType != "none" {
-                        TextField(actionType == "app" ? "App Path" : "Shell Command", text: $actionTarget)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        HStack {
+                            TextField(actionType == "app" ? "App Path" : "Shell Command", text: $actionTarget)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            
+                            if actionType == "app" {
+                                Button("Browse...") {
+                                    let panel = NSOpenPanel()
+                                    panel.canChooseFiles = true
+                                    panel.canChooseDirectories = false
+                                    panel.allowsMultipleSelection = false
+                                    panel.allowedFileTypes = ["app"]
+                                    if panel.runModal() == .OK {
+                                        self.actionTarget = panel.url?.path ?? ""
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -880,4 +1028,56 @@ struct EditActionSheet: View {
     }
 }
 
+struct QuickLaunchDockView: View {
+    let apps = [
+        ("Google Chrome", "com.google.Chrome", "/Applications/Google Chrome.app"),
+        ("ChatGPT", "com.openai.chat", "/Applications/ChatGPT.app"),
+        ("Telegram", "ru.keepcoder.Telegram", "/Applications/Telegram.app")
+    ]
+    
+    func getAppURL(for app: (name: String, bundleId: String, defaultPath: String)) -> URL? {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleId) {
+            return url
+        }
+        let defaultURL = URL(fileURLWithPath: app.defaultPath)
+        if FileManager.default.fileExists(atPath: defaultURL.path) {
+            return defaultURL
+        }
+        return nil
+    }
 
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(apps.indices, id: \.self) { index in
+                Group {
+                    if self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2)) != nil {
+                        Button(action: {
+                            if let url = self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2)) {
+                                let config = NSWorkspace.OpenConfiguration()
+                                NSWorkspace.shared.openApplication(at: url, configuration: config, completionHandler: nil)
+                            }
+                        }) {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2))!.path))
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 20, height: 20)
+                                .saturation(0.0) // Black and white (grayscale)
+                                .opacity(0.8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .background(TooltipView(text: self.apps[index].0))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        
+                        if index < self.apps.count - 1 {
+                            Divider().frame(height: 16)
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.gray.opacity(0.12))
+        .cornerRadius(12)
+        .padding(.vertical, 8)
+    }
+}
