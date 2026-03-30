@@ -8,7 +8,7 @@ It presents a lightning button in the menu bar and a normal Dock app window, rep
 You don't need Python or virtual environments anymore. To build the app yourself:
 
 ```bash
-cd "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre copy"
+cd "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre"
 chmod +x build.sh
 ./build.sh
 ```
@@ -22,7 +22,7 @@ If the build fails before compilation starts with an `xcrun` or Command Line Too
 Whenever you restart your Mac or want to launch the app, simply run the compiled app:
 
 ```bash
-open "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre copy/build/MacControlCenter.app"
+open "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre/build/MacControlCenter.app"
 ```
 
 *Alternatively, you can just double click `build/MacControlCenter.app` in Finder.* The app opens a regular macOS window, appears in the Dock while running, and also adds a lightning button to the menu bar.
