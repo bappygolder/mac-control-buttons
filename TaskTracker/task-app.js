@@ -6,17 +6,20 @@
   const ACTIVE_LANES = [
     "newly-added-or-updated",
     "backlog",
-    "processing-or-on-hold",
+    "processing",
+    "on-hold",
     "in-progress"
   ];
   const HIDDEN_LANES = ["completed", "archived"];
   const LANE_LABELS = {
-    "newly-added-or-updated": "Newly Added or Updated",
+    "newly-added-or-updated": "Newly Added",
     "backlog": "Backlog",
-    "processing-or-on-hold": "Processing / On Hold",
+    "processing": "Processing",
+    "on-hold": "On Hold",
     "in-progress": "In Progress",
-    completed: "Completed",
-    archived: "Archived"
+    "completed": "Completed",
+    "archived": "Archived",
+    "completed-archived": "Completed & Archived"
   };
   const PRIORITY_TO_URGENCY = { P0: 5, P1: 4, P2: 3, P3: 2 };
   const PRIORITY_TO_VALUE = { P0: 25000, P1: 10000, P2: 5000, P3: 1000 };
@@ -72,6 +75,7 @@
   let editingId = null;
   let activeView = savedState.ui.view || "cards";
   let hiddenExpanded = Boolean(savedState.ui.hiddenExpanded);
+  let dragTaskId = null;
 
   init();
 
@@ -209,7 +213,13 @@
   }
 
   function normalizeLane(task) {
-    if (task.lane && (ACTIVE_LANES.concat(HIDDEN_LANES)).indexOf(task.lane) >= 0) {
+    // Migrate old combined lane to the new split version
+    if (task.lane === "processing-or-on-hold") {
+      return "processing";
+    }
+
+    const allLanes = ACTIVE_LANES.concat(HIDDEN_LANES);
+    if (task.lane && allLanes.indexOf(task.lane) >= 0) {
       return task.lane;
     }
 
@@ -219,7 +229,7 @@
       case "in-progress":
         return "in-progress";
       case "blocked":
-        return "processing-or-on-hold";
+        return "processing";
       default:
         return "backlog";
     }
@@ -376,7 +386,7 @@
     [
       { label: "Total", value: counts.total },
       { label: "Active", value: counts.active },
-      { label: "Hidden", value: counts.hidden },
+      { label: "Done", value: counts.hidden },
       { label: "Urgent", value: counts.urgent }
     ].forEach(function (item) {
       const card = document.createElement("div");
@@ -389,16 +399,20 @@
   function renderViewHeader(filteredTasks) {
     elements.workspaceTitle.textContent = activeView === "cards" ? "Cards" : "Board";
     elements.filterSummary.textContent =
-      filteredTasks.length + " shown · " + tasks.length + " total · " + (activeView === "cards" ? "simple card view" : "board view");
+      filteredTasks.length + " shown · " + tasks.length + " total · " + (activeView === "cards" ? "list view" : "kanban view");
   }
 
   function syncViewMode() {
     const cardsActive = activeView === "cards";
     elements.cardsView.hidden = !cardsActive;
     elements.boardView.hidden = cardsActive;
+    // Hide the collapsible completed section in board view — it's a board column there
+    elements.hiddenListsWrap.style.display = cardsActive ? "" : "none";
     elements.cardsViewButton.classList.toggle("active", cardsActive);
     elements.boardViewButton.classList.toggle("active", !cardsActive);
   }
+
+  // ─── Card / List view ──────────────────────────────────────────────────────
 
   function renderCardsView(filteredTasks) {
     elements.cardsView.innerHTML = "";
@@ -411,39 +425,125 @@
       return;
     }
 
-    const grid = document.createElement("div");
-    grid.className = "task-grid";
+    const list = document.createElement("div");
+    list.className = "task-list";
     activeTasks.forEach(function (task) {
-      grid.appendChild(buildTaskCard(task, true));
+      list.appendChild(buildListRow(task));
     });
-    elements.cardsView.appendChild(grid);
+    elements.cardsView.appendChild(list);
   }
+
+  function buildListRow(task) {
+    const row = document.createElement("article");
+    row.className = "list-row";
+
+    const dot = document.createElement("span");
+    dot.className = "list-urgency u-" + task.urgency;
+    dot.title = "Urgency " + task.urgency + " / 5";
+
+    const content = document.createElement("div");
+    content.className = "list-content";
+
+    const title = document.createElement("h3");
+    title.className = "list-title";
+    title.textContent = task.title;
+    content.appendChild(title);
+
+    if (task.notes) {
+      const notes = document.createElement("p");
+      notes.className = "list-notes";
+      notes.textContent = task.notes;
+      content.appendChild(notes);
+    }
+
+    const lane = document.createElement("span");
+    lane.className = "list-lane";
+    lane.textContent = LANE_LABELS[task.lane] || task.lane;
+
+    const tools = document.createElement("div");
+    tools.className = "list-tools";
+    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
+      openModal(task);
+    }));
+    tools.appendChild(makeIconButton("Delete task", trashIcon(), function () {
+      deleteTask(task.id);
+    }));
+
+    row.appendChild(dot);
+    row.appendChild(content);
+    row.appendChild(lane);
+    row.appendChild(tools);
+
+    return row;
+  }
+
+  // ─── Board view ────────────────────────────────────────────────────────────
 
   function renderBoardView(filteredTasks) {
     elements.boardColumns.innerHTML = "";
 
-    ACTIVE_LANES.forEach(function (lane) {
-      const laneTasks = filteredTasks
-        .filter(function (task) { return task.lane === lane; })
+    var boardCols = [
+      { key: "newly-added-or-updated", lanes: ["newly-added-or-updated"] },
+      { key: "backlog",                lanes: ["backlog"] },
+      { key: "processing",             lanes: ["processing"] },
+      { key: "on-hold",                lanes: ["on-hold"] },
+      { key: "in-progress",            lanes: ["in-progress"] },
+      { key: "completed-archived",     lanes: ["completed", "archived"], isDone: true }
+    ];
+
+    boardCols.forEach(function (col) {
+      var laneTasks = filteredTasks
+        .filter(function (task) { return col.lanes.indexOf(task.lane) >= 0; })
         .sort(sortTasks);
 
-      const column = document.createElement("section");
-      column.className = "board-column";
+      var column = document.createElement("section");
+      column.className = "board-column" + (col.isDone ? " board-column--done" : "");
 
-      const header = document.createElement("div");
+      var header = document.createElement("div");
       header.className = "board-column-header";
-      header.innerHTML =
-        '<div class="board-column-title">' + escapeHtml(LANE_LABELS[lane]) + '</div>' +
-        '<div class="board-column-count">' + laneTasks.length + "</div>";
 
-      const body = document.createElement("div");
+      var titleEl = document.createElement("div");
+      titleEl.className = "board-column-title";
+      titleEl.textContent = LANE_LABELS[col.key];
+
+      var countEl = document.createElement("div");
+      countEl.className = "board-column-count";
+      countEl.textContent = String(laneTasks.length);
+
+      header.appendChild(titleEl);
+      header.appendChild(countEl);
+
+      var body = document.createElement("div");
       body.className = "board-column-body";
+      // Dropping onto the done column sends tasks to "completed"
+      body.dataset.lane = col.isDone ? "completed" : col.key;
+
+      body.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        body.classList.add("drag-over");
+      });
+      body.addEventListener("dragleave", function (e) {
+        if (!body.contains(e.relatedTarget)) {
+          body.classList.remove("drag-over");
+        }
+      });
+      body.addEventListener("drop", function (e) {
+        e.preventDefault();
+        body.classList.remove("drag-over");
+        if (dragTaskId) {
+          moveTask(dragTaskId, body.dataset.lane);
+        }
+      });
 
       if (!laneTasks.length) {
-        body.innerHTML = '<div class="board-empty">No cards</div>';
+        var empty = document.createElement("div");
+        empty.className = "board-empty";
+        empty.textContent = "Drop here";
+        body.appendChild(empty);
       } else {
         laneTasks.forEach(function (task) {
-          body.appendChild(buildTaskCard(task, false));
+          body.appendChild(buildBoardCard(task, col.isDone));
         });
       }
 
@@ -452,6 +552,67 @@
       elements.boardColumns.appendChild(column);
     });
   }
+
+  function buildBoardCard(task, inDoneColumn) {
+    const card = document.createElement("article");
+    card.className = "board-card";
+    card.draggable = true;
+    card.dataset.taskId = task.id;
+
+    card.addEventListener("dragstart", function (e) {
+      dragTaskId = task.id;
+      setTimeout(function () { card.classList.add("is-dragging"); }, 0);
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", function () {
+      dragTaskId = null;
+      card.classList.remove("is-dragging");
+    });
+
+    const top = document.createElement("div");
+    top.className = "board-card-top";
+
+    const dot = document.createElement("span");
+    dot.className = "list-urgency u-" + task.urgency;
+    dot.title = "Urgency " + task.urgency + " / 5";
+
+    const tools = document.createElement("div");
+    tools.className = "list-tools board-card-tools";
+    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
+      openModal(task);
+    }));
+    tools.appendChild(makeIconButton("Delete task", trashIcon(), function () {
+      deleteTask(task.id);
+    }));
+
+    top.appendChild(dot);
+    top.appendChild(tools);
+
+    const title = document.createElement("h3");
+    title.className = "board-card-title";
+    title.textContent = task.title;
+
+    card.appendChild(top);
+    card.appendChild(title);
+
+    if (task.notes) {
+      const notes = document.createElement("p");
+      notes.className = "board-card-notes";
+      notes.textContent = task.notes;
+      card.appendChild(notes);
+    }
+
+    if (inDoneColumn) {
+      const sub = document.createElement("span");
+      sub.className = "board-card-sublane";
+      sub.textContent = LANE_LABELS[task.lane];
+      card.appendChild(sub);
+    }
+
+    return card;
+  }
+
+  // ─── Hidden lists (card view only) ────────────────────────────────────────
 
   function renderHiddenLists(filteredTasks) {
     const completedTasks = filteredTasks
@@ -473,133 +634,29 @@
     elements.archivedList.innerHTML = "";
 
     if (!completedTasks.length) {
-      elements.completedList.innerHTML = '<div class="board-empty">No completed cards</div>';
+      elements.completedList.innerHTML = '<div class="board-empty">No completed tasks.</div>';
     } else {
       completedTasks.forEach(function (task) {
-        elements.completedList.appendChild(buildTaskCard(task, true));
+        elements.completedList.appendChild(buildListRow(task));
       });
     }
 
     if (!archivedTasks.length) {
-      elements.archivedList.innerHTML = '<div class="board-empty">No archived cards</div>';
+      elements.archivedList.innerHTML = '<div class="board-empty">No archived tasks.</div>';
     } else {
       archivedTasks.forEach(function (task) {
-        elements.archivedList.appendChild(buildTaskCard(task, true));
+        elements.archivedList.appendChild(buildListRow(task));
       });
     }
   }
 
-  function buildTaskCard(task, forGrid) {
-    const card = document.createElement("article");
-    card.className = "task-card" + (forGrid ? " task-card-grid" : " task-card-board");
-    card.title = task.title + (task.notes ? " — " + task.notes : "");
-
-    const top = document.createElement("div");
-    top.className = "task-card-top";
-    top.innerHTML =
-      '<div class="task-card-lane">' + escapeHtml(LANE_LABELS[task.lane]) + "</div>" +
-      '<div class="task-card-tools"></div>';
-
-    const tools = top.querySelector(".task-card-tools");
-    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
-      openModal(task);
-    }));
-    tools.appendChild(makeIconButton("Delete task", trashIcon(), function () {
-      deleteTask(task.id);
-    }));
-
-    const title = document.createElement("h3");
-    title.className = "task-card-title";
-    title.textContent = task.title;
-
-    const notes = document.createElement("p");
-    notes.className = "task-card-notes";
-    notes.textContent = task.notes || "No notes yet.";
-
-    const metrics = document.createElement("div");
-    metrics.className = "task-card-metrics";
-    metrics.innerHTML =
-      '<span class="metric-chip">$' + formatCurrency(task.value) + "</span>" +
-      '<span class="metric-chip">Urgency ' + task.urgency + "/5</span>";
-
-    const meta = document.createElement("div");
-    meta.className = "task-card-meta";
-    meta.innerHTML =
-      '<span class="mini-meta">' + escapeHtml(task.area) + "</span>" +
-      '<span class="mini-meta">' + escapeHtml(humanizeSource(task.source)) + "</span>" +
-      (task.recommendedBy ? '<span class="mini-meta accent-meta">AI recommended</span>' : "");
-
-    const actions = document.createElement("div");
-    actions.className = "task-card-actions";
-    buildActionButtons(task).forEach(function (button) {
-      actions.appendChild(button);
-    });
-
-    const modified = document.createElement("div");
-    modified.className = "task-card-modified";
-    modified.textContent = "Last modified: " + formatHumanDate(task.lastModified);
-
-    card.appendChild(top);
-    card.appendChild(title);
-    card.appendChild(notes);
-    card.appendChild(metrics);
-    card.appendChild(meta);
-    card.appendChild(actions);
-    card.appendChild(modified);
-    return card;
-  }
-
-  function buildActionButtons(task) {
-    const buttons = [];
-
-    if (task.lane === "completed") {
-      buttons.push(makeActionButton("Reopen", "secondary", function () {
-        moveTask(task.id, "backlog");
-      }));
-      buttons.push(makeActionButton("Archive", "ghost", function () {
-        moveTask(task.id, "archived");
-      }));
-    } else if (task.lane === "archived") {
-      buttons.push(makeActionButton("Restore", "secondary", function () {
-        moveTask(task.id, "backlog");
-      }));
-    } else {
-      buttons.push(makeActionButton("Done", "primary", function () {
-        moveTask(task.id, "completed");
-      }));
-      buttons.push(makeActionButton("Archive", "ghost", function () {
-        moveTask(task.id, "archived");
-      }));
-    }
-
-    return buttons;
-  }
-
-  function makeActionButton(label, variant, handler) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = variant === "primary" ? "primary task-action-button" : variant + " task-action-button";
-    button.textContent = label;
-    button.addEventListener("click", handler);
-    return button;
-  }
-
-  function makeIconButton(label, iconMarkup, handler) {
-    const button = document.createElement("button");
-    button.className = "icon-button";
-    button.type = "button";
-    button.setAttribute("aria-label", label);
-    button.innerHTML = iconMarkup;
-    button.addEventListener("click", handler);
-    return button;
-  }
+  // ─── Task mutations ────────────────────────────────────────────────────────
 
   function moveTask(taskId, nextLane) {
     tasks = tasks.map(function (task) {
       if (task.id !== taskId) {
         return task;
       }
-
       return Object.assign({}, task, {
         lane: nextLane,
         lastModified: formatDateISO(new Date())
@@ -622,6 +679,8 @@
     render();
   }
 
+  // ─── Sorting ───────────────────────────────────────────────────────────────
+
   function sortTasks(a, b) {
     const laneOrderA = ACTIVE_LANES.concat(HIDDEN_LANES).indexOf(a.lane);
     const laneOrderB = ACTIVE_LANES.concat(HIDDEN_LANES).indexOf(b.lane);
@@ -637,9 +696,12 @@
     return String(b.lastModified).localeCompare(String(a.lastModified));
   }
 
+  // ─── Export ────────────────────────────────────────────────────────────────
+
   function exportJson() {
+    const date = formatDateISO(new Date());
     downloadFile(
-      "mac-control-center-task-tracker.json",
+      "mcc-tracker-" + date + ".json",
       JSON.stringify(
         {
           project: data.project,
@@ -655,6 +717,7 @@
   }
 
   function exportMarkdown() {
+    const date = formatDateISO(new Date());
     const lines = [
       "# Mac Control Center Task Tracker",
       "",
@@ -670,9 +733,7 @@
         "- " +
           task.title +
           " | " +
-          LANE_LABELS[task.lane] +
-          " | $" +
-          formatCurrency(task.value) +
+          (LANE_LABELS[task.lane] || task.lane) +
           " | urgency " +
           task.urgency +
           " | last modified " +
@@ -685,7 +746,7 @@
     });
 
     downloadFile(
-      "mac-control-center-task-tracker.md",
+      "mcc-tracker-" + date + ".md",
       lines.join("\n"),
       "text/markdown"
     );
@@ -718,16 +779,7 @@
     URL.revokeObjectURL(url);
   }
 
-  function humanizeSource(source) {
-    switch (source) {
-      case "recommended":
-        return "Recommended";
-      case "local-note":
-        return "Local";
-      default:
-        return "Requested";
-    }
-  }
+  // ─── Utilities ─────────────────────────────────────────────────────────────
 
   function urgencyToPriority(urgency) {
     if (urgency >= 5) return "P0";
@@ -744,27 +796,8 @@
     return Math.max(min, Math.min(max, number));
   }
 
-  function formatCurrency(value) {
-    return Number(value || 0).toLocaleString("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    });
-  }
-
   function formatDateISO(date) {
     return new Date(date).toISOString().slice(0, 10);
-  }
-
-  function formatHumanDate(raw) {
-    const date = new Date(raw);
-    if (Number.isNaN(date.getTime())) {
-      return raw;
-    }
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
-    });
   }
 
   function escapeHtml(value) {
@@ -776,11 +809,21 @@
       .replace(/'/g, "&#039;");
   }
 
+  function makeIconButton(label, iconMarkup, handler) {
+    const button = document.createElement("button");
+    button.className = "icon-button";
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.innerHTML = iconMarkup;
+    button.addEventListener("click", handler);
+    return button;
+  }
+
   function pencilIcon() {
-    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   }
 
   function trashIcon() {
-    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
   }
 })();

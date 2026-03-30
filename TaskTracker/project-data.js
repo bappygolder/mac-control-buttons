@@ -8,7 +8,7 @@ window.MCCProjectData = {
   },
   tracker: {
     storageKey: "mac-control-center-task-tracker-v1",
-    seedVersion: "2026-03-30",
+    seedVersion: "2026-03-30-r2",
     recommendedByLabel: "Codex (GPT-5)",
     areas: [
       "project-system",
@@ -211,6 +211,42 @@ window.MCCProjectData = {
         source: "recommended",
         recommendedBy: "Codex (GPT-5)",
         references: ["../docs/APP_ARCHITECTURE.md"]
+      },
+      {
+        id: "MCC-017",
+        title: "Add due date field to tasks",
+        notes:
+          "The current task model has no deadline concept. A lightweight due date field would help prioritise time-sensitive work without overcomplicating the schema.",
+        lane: "newly-added-or-updated",
+        priority: "P2",
+        area: "product",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: []
+      },
+      {
+        id: "MCC-018",
+        title: "Add keyboard shortcuts: N to create, / to search, Esc to close",
+        notes:
+          "Basic hotkeys make the tracker feel native and reduce friction for power users. N opens the add-task modal, / focuses the search input, Esc dismisses any open modal.",
+        lane: "newly-added-or-updated",
+        priority: "P2",
+        area: "ui-ux",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: []
+      },
+      {
+        id: "MCC-019",
+        title: "Shorten export filenames and include date timestamp",
+        notes:
+          "Current filenames are long and generic. Switching to mcc-tracker-YYYY-MM-DD.json and mcc-tracker-YYYY-MM-DD.md makes exports easier to sort and identify.",
+        lane: "newly-added-or-updated",
+        priority: "P3",
+        area: "ui-ux",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: []
       }
     ]
   },
