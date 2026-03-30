@@ -1,0 +1,321 @@
+window.MCCProjectData = {
+  project: {
+    name: "Mac Control Center",
+    reviewedOn: "2026-03-30",
+    maintainedBy: "Codex (GPT-5)",
+    summary:
+      "Local-first task tracking and project docs for the native macOS Mac Control Center utility."
+  },
+  tracker: {
+    storageKey: "mac-control-center-task-tracker-v1",
+    seedVersion: "2026-03-30",
+    recommendedByLabel: "Codex (GPT-5)",
+    areas: [
+      "project-system",
+      "docs",
+      "product",
+      "platform",
+      "release",
+      "security",
+      "ui-ux"
+    ],
+    tasks: [
+      {
+        id: "MCC-001",
+        title: "Replace copied tracker content with a Mac Control Center workspace",
+        notes:
+          "Remove foreign project references, rebuild the local tracker shell, and make this folder a reusable project-management layer for this repo.",
+        status: "done",
+        priority: "P0",
+        area: "project-system",
+        source: "user-requested",
+        recommendedBy: "",
+        references: ["../docs/LOCAL_PROJECT_SYSTEM.md"]
+      },
+      {
+        id: "MCC-002",
+        title: "Create a clean documentation baseline for the project",
+        notes:
+          "Build a real docs index, architecture docs, release notes, persistence guide, and task-tracker workflow docs tailored to this app.",
+        status: "done",
+        priority: "P0",
+        area: "docs",
+        source: "user-requested",
+        recommendedBy: "",
+        references: ["../docs/README.md", "../docs/PROJECT_OVERVIEW.md"]
+      },
+      {
+        id: "MCC-003",
+        title: "Document how persistence works across app state and tracker state",
+        notes:
+          "Clarify what lives in config.json, what lives in UserDefaults, and what the browser tracker stores only in localStorage.",
+        status: "done",
+        priority: "P0",
+        area: "docs",
+        source: "user-requested",
+        recommendedBy: "",
+        references: ["../docs/PERSISTENCE_AND_STATE.md"]
+      },
+      {
+        id: "MCC-004",
+        title: "Define the local-to-online tracker sync workflow",
+        notes:
+          "Choose the online system, decide whether the repo or the online tracker is the source of truth, and build a lightweight export/import habit before automation.",
+        status: "todo",
+        priority: "P1",
+        area: "project-system",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/LOCAL_PROJECT_SYSTEM.md"]
+      },
+      {
+        id: "MCC-005",
+        title: "Add duplicate shortcut validation for action creation and editing",
+        notes:
+          "Prevent or warn on `Cmd + [Key]` conflicts so one action does not silently shadow another.",
+        status: "todo",
+        priority: "P1",
+        area: "product",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/ACTION_SYSTEM.md"]
+      },
+      {
+        id: "MCC-006",
+        title: "Add import, export, and reset controls for action config",
+        notes:
+          "Expose safe backup and restore flows for `config.json` from the app UI instead of requiring filesystem work.",
+        status: "todo",
+        priority: "P1",
+        area: "product",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/ACTION_SYSTEM.md", "../docs/PERSISTENCE_AND_STATE.md"]
+      },
+      {
+        id: "MCC-007",
+        title: "Replace AppleScript launch-at-login with a modern macOS approach",
+        notes:
+          "Review ServiceManagement-based options and reduce brittleness around login items.",
+        status: "todo",
+        priority: "P1",
+        area: "platform",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/PROJECT_AUDIT.md"]
+      },
+      {
+        id: "MCC-008",
+        title: "Make the quick-launch dock user-configurable",
+        notes:
+          "The dock is currently hardcoded to Chrome, ChatGPT, and Telegram. Move that list into user-managed configuration.",
+        status: "todo",
+        priority: "P1",
+        area: "product",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../BEHAVIORS.md"]
+      },
+      {
+        id: "MCC-009",
+        title: "Improve action failure feedback beyond notifications only",
+        notes:
+          "Add inline error clarity, last-run status, or lightweight execution history so failures are easier to diagnose.",
+        status: "todo",
+        priority: "P1",
+        area: "product",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/UI_AND_UX_GUIDELINES.md"]
+      },
+      {
+        id: "MCC-010",
+        title: "Add a GitHub Actions smoke-build workflow",
+        notes:
+          "Run `./build.sh` on macOS in CI before adding release automation.",
+        status: "todo",
+        priority: "P2",
+        area: "release",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/RELEASE_AND_DEPLOYMENT.md"]
+      },
+      {
+        id: "MCC-011",
+        title: "Package and publish a repeatable release artifact",
+        notes:
+          "Decide whether the first public release should be a `.zip` or `.dmg`, then document and script the packaging flow.",
+        status: "todo",
+        priority: "P2",
+        area: "release",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/RELEASE_AND_DEPLOYMENT.md"]
+      },
+      {
+        id: "MCC-012",
+        title: "Define a trusted-command model for shell actions",
+        notes:
+          "Document what kinds of shell commands are expected, how users should store scripts, and how to avoid unsafe defaults in a public repo.",
+        status: "todo",
+        priority: "P2",
+        area: "security",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../SECURITY.md", "../docs/ACTION_SYSTEM.md"]
+      },
+      {
+        id: "MCC-013",
+        title: "Create screenshots and first-run onboarding docs",
+        notes:
+          "Capture the app modes and action setup flow so the repo is easier for future collaborators to understand quickly.",
+        status: "todo",
+        priority: "P2",
+        area: "docs",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/PROJECT_OVERVIEW.md"]
+      },
+      {
+        id: "MCC-014",
+        title: "Add config schema migration and backup planning",
+        notes:
+          "Before expanding settings and action metadata, decide how old config files will be migrated safely.",
+        status: "todo",
+        priority: "P2",
+        area: "platform",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/PERSISTENCE_AND_STATE.md"]
+      },
+      {
+        id: "MCC-015",
+        title: "Review branding polish for iconography and status-item presentation",
+        notes:
+          "The app currently uses a text bolt in the menu bar. Consider a stronger asset and consistency pass after core product work stabilizes.",
+        status: "todo",
+        priority: "P3",
+        area: "ui-ux",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/UI_AND_UX_GUIDELINES.md"]
+      },
+      {
+        id: "MCC-016",
+        title: "Add basic automated coverage for config normalization and persistence",
+        notes:
+          "Even lightweight verification around `ConfigManager` would reduce regressions when action metadata grows.",
+        status: "todo",
+        priority: "P2",
+        area: "platform",
+        source: "recommended",
+        recommendedBy: "Codex (GPT-5)",
+        references: ["../docs/APP_ARCHITECTURE.md"]
+      }
+    ]
+  },
+  docs: [
+    {
+      title: "Documentation Index",
+      summary: "The map of all project docs and the update rules for keeping them in sync.",
+      path: "../docs/README.md"
+    },
+    {
+      title: "Project Overview",
+      summary: "Scope, repo layout, current capabilities, and known constraints.",
+      path: "../docs/PROJECT_OVERVIEW.md"
+    },
+    {
+      title: "Project Audit",
+      summary: "Current strengths, gaps, and recommended next milestones for the app.",
+      path: "../docs/PROJECT_AUDIT.md"
+    },
+    {
+      title: "App Architecture",
+      summary: "Main runtime components and how windowing, menus, and configuration connect.",
+      path: "../docs/APP_ARCHITECTURE.md"
+    },
+    {
+      title: "Action System",
+      summary: "Action model, storage, execution modes, and follow-up risks.",
+      path: "../docs/ACTION_SYSTEM.md"
+    },
+    {
+      title: "Persistence and State",
+      summary: "What is stored in config.json, UserDefaults, and browser localStorage.",
+      path: "../docs/PERSISTENCE_AND_STATE.md"
+    },
+    {
+      title: "Local Project System",
+      summary: "How the local tracker, docs hub, and online sync habit should work together.",
+      path: "../docs/LOCAL_PROJECT_SYSTEM.md"
+    },
+    {
+      title: "Release and Deployment",
+      summary: "Current manual build flow and the release automation plan.",
+      path: "../docs/RELEASE_AND_DEPLOYMENT.md"
+    },
+    {
+      title: "UI and UX Guidelines",
+      summary: "Native macOS utility principles and known UI debt.",
+      path: "../docs/UI_AND_UX_GUIDELINES.md"
+    },
+    {
+      title: "Behavior Log",
+      summary: "Compact reference for view modes, shortcuts, and user-visible interaction rules.",
+      path: "../BEHAVIORS.md"
+    },
+    {
+      title: "Security Policy",
+      summary: "Public-repo guidance, local-only state, and shell-action caution points.",
+      path: "../SECURITY.md"
+    }
+  ],
+  skills: [
+    {
+      title: "Post-Change Verification",
+      summary: "Standard rebuild and relaunch loop after code changes.",
+      path: "../.agent/skills/always_rerun_app/SKILL.md"
+    },
+    {
+      title: "Build and Run App",
+      summary: "Canonical local build, install, and launch commands.",
+      path: "../.agent/skills/build_and_run_app/SKILL.md"
+    },
+    {
+      title: "Document Behaviors",
+      summary: "Rules for updating behavior and architecture docs with feature changes.",
+      path: "../.agent/skills/document_behaviors/SKILL.md"
+    },
+    {
+      title: "Maintain Task Tracker",
+      summary: "How to keep the local tracker, docs hub, and backlog seed data aligned.",
+      path: "../.agent/skills/maintain_task_tracker/SKILL.md"
+    },
+    {
+      title: "GitHub Actions CI",
+      summary: "Phased guidance for adding build verification and release automation.",
+      path: "../.agent/skills/github_actions_ci/SKILL.md"
+    },
+    {
+      title: "Release Packaging Plan",
+      summary: "Checklist for moving from local builds to packaged releases.",
+      path: "../.agent/skills/create_dmg_installer/SKILL.md"
+    },
+    {
+      title: "macOS Native UI Design Guidelines",
+      summary: "Native-first design guardrails for this utility app.",
+      path: "../.agent/skills/macos_native_ui_design/SKILL.md"
+    },
+    {
+      title: "Mac Utility UX",
+      summary: "Speed, clarity, and low-friction interaction rules.",
+      path: "../.agent/skills/top_notch_mac_ux/SKILL.md"
+    },
+    {
+      title: "Protect Public Repo",
+      summary: "Avoid secrets, private paths, and accidental local-state leaks.",
+      path: "../.agent/skills/prevent_secrets_leak/SKILL.md"
+    }
+  ]
+};

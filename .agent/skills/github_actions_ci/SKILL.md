@@ -1,14 +1,16 @@
 ---
-name: GitHub Actions CI/CD Setup
-description: [DRAFT] Instructions and guidelines on how to structure GitHub Actions for CI/CD of our macOS app.
+name: GitHub Actions CI
+description: Use when adding or updating GitHub Actions for Mac Control Center build verification or release automation.
 ---
 
-# GitHub Actions CI/CD Setup (Work in Progress)
+# GitHub Actions CI
 
-This skill will contain the standard operating procedures for setting up our automated release pipeline on GitHub. 
+Prefer small, verifiable steps.
 
-### Future Subtasks:
-- Define a macOS-latest runner configuration.
-- Automate Xcodebuild or the `build.sh` script.
-- Automate code signing with Apple Developer certificates stored in GitHub Secrets.
-- Package the `.app` into a `.zip` or `.dmg` and publish it as a GitHub Release whenever a new tag is pushed.
+## Phase Order
+
+1. Add a macOS runner that executes `./build.sh`.
+2. Preserve build logs and artifacts.
+3. Only then add packaging, release uploads, signing, or notarization.
+
+Update `docs/RELEASE_AND_DEPLOYMENT.md` when the workflow changes.

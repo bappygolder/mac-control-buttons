@@ -1,13 +1,16 @@
 ---
-name: Create DMG Installer
-description: [DRAFT] Future guidelines on how to package the Mac Control Center app into a downloadable .dmg file.
+name: Release Packaging Plan
+description: Use when planning or implementing a user-facing packaged release for Mac Control Center.
 ---
 
-# Create DMG Installer (Work in Progress)
+# Release Packaging Plan
 
-This skill will eventually contain the necessary instructions, scripts, or references to tools (like `create-dmg`) needed to package our compiled `MacControlCenter.app` into a user-friendly DMG executable for distribution. 
+This repo does not yet ship a packaged installer. Use this checklist when moving from local builds to distributable artifacts.
 
-### Future Subtasks:
-- Identify native macOS tools or homebrew packages for `.dmg` generation.
-- Add scripting to automatically mount, copy, and set the background image of the DMG window.
-- Automate code signing inside the DMG.
+## Checklist
+
+1. Make sure `./build.sh` produces a stable app bundle.
+2. Decide whether the first release artifact is `.zip` or `.dmg`.
+3. Add a repeatable packaging script before publishing manually built artifacts.
+4. Document signing and notarization requirements separately from local packaging.
+5. Update `docs/RELEASE_AND_DEPLOYMENT.md` when the packaging flow changes.

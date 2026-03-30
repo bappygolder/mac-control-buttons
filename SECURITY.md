@@ -1,16 +1,23 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting
 
-Please report any security issues or vulnerabilities privately. Do not open a public issue.
+Please report vulnerabilities privately. Do not open a public issue for a live security problem.
 
-## Preventing Secrets Leakage
+## Public Repo Rules
 
-This repository is **public**. It is strictly prohibited to commit private data, API keys, passwords, or personal credentials. 
+This repository is public. Do not commit secrets, private tokens, local credentials, personal URLs, or machine-specific data.
 
-### Guidelines for Development
-1. **Never commit hardcoded secrets**: Store them utilizing `.env` files or secure keystores.
-2. **Review `.gitignore`**: Ensure files containing local configuration or secrets are added to `.gitignore`.
-3. **Be careful with user-specific paths**: Avoid committing files that accidentally reveal private or sensitive paths unless absolutely necessary for the application.
+## Development Guardrails
 
-If an AI assistant or contributor attempts to push private data, please verify your changes before executing `git commit` or `git push`.
+1. Use `.env` files or OS-level secure storage for secrets.
+2. Keep local-only files out of git with `.gitignore`.
+3. Avoid hardcoded personal filesystem paths in docs, scripts, or UI defaults when a portable path will work.
+4. Treat exported task-tracker snapshots as reviewable content before sharing them online.
+5. Review shell-command examples carefully because the app can run user-defined shell actions.
+
+## Project-Specific Notes
+
+- App action definitions live in a user-owned config file under `~/Library/Application Support/MacControlCenter/`.
+- Browser edits inside `TaskTracker/` are local unless explicitly exported or committed.
+- AI assistants should stop before staging anything that looks like private workspace state.

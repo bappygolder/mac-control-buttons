@@ -1,5 +1,6 @@
 # macOS / Xcode
 .DS_Store
+.claude/
 build/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/

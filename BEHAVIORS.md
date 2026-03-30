@@ -1,52 +1,56 @@
-# Mac Control Center Behaviors Documentation
+# Mac Control Center Behaviors
 
-This document explicitly outlines the interactions, functional behaviors, and UI/UX state management of the Mac Control Center application.
+This file is the fast-reference behavior log for the app. Update it whenever user-visible behavior or interaction rules change.
 
-**Whenever a new functionality, interaction, or view state behavior is created or modified, this document MUST be updated.**
+## View Modes
 
-## 1. Application View Modes
+### Expanded
 
-The application supports three dynamically swappable View Modes:
+- Default working mode for the full action list.
+- Shows toolbar controls, inline settings, add-action flow, edit mode, and the quick-launch dock.
+- Uses a standard titled macOS window with transparent title bar styling.
 
-### 1.1 Expanded View
-- **Description:** The full, default mode. Displays the primary UI with an actions list, inline settings view, and full toolbars.
-- **Window:** Standard rounded MacOS rectangular window.
-- **Interactions:** User can drag the window via the title bar region. Supports reordering of tasks from the main list.
+### Mini
 
-### 1.2 Mini View
-- **Description:** A tightly condensed list form.
-- **Window:** Resized significantly smaller.
-- **Interactions:** The background of the Mini view features a global `WindowDragHandler` that intercepts clicks, allowing the user to click anywhere blank on the UI to drag the window natively.
+- Condensed control mode for quick access to actions.
+- Shows the view mode picker, always-on-top toggle, compact action list, and quick-launch dock.
+- Uses a drag handler so blank areas can still move the window naturally.
 
-### 1.3 Dot View
-- **Description:** A highly condensed, floating dot interface intended for minimum destructibility.
-- **Window:** Completely borderless, transparent, with zero shadow.
-- **Interactions:** 
-  - The window is forcibly squashed down to an 80x80 exact size to avoid visual artifacts.
-  - Features an invisible, large hitobox layered over a smaller visible blue dot, allowing the user an easy target to interact with.
-  - Clicking the dot transitions the app straight into Mini View.
+### Dot
 
-## 2. Window Level State & Management
+- Minimal floating mode for reduced visual footprint.
+- Switches the window to borderless, transparent, shadowless presentation.
+- Forces the window to a small square hit area and returns to Mini mode on click.
 
-- **Window Traffic Lights:** Utilizes native macOS AppKit `.fullSizeContentView` and `.titlebarAppearsTransparent = true`. The standard Red/Yellow/Green window controls remain continually visible but smoothly integrate into the UI. Unfocused windows dim them to gray natively.
-- **Always on Top:** Users can toggle this setting, raising the window's `.level` to `.floating`.
-- **Show on All Desktops:** Allows the application to join all macOS spaces natively using `window.collectionBehavior.insert(.canJoinAllSpaces)`.
-- **Opacity Settings:** Users can adjust window opacity from 20% to 100%.
-- **Dock Presence:** The app runs as a regular macOS application and remains visible in the Dock while also exposing a persistent menu bar status item.
+## Window Behavior
 
-## 3. Inline Task & Action Management
-- **Add / Edit Actions:** Rather than using floating modal sheets, actions are created and edited via an inline scrolling form layout to remain cleanly contained within the parent window's bounds.
-- **Persistence:** App Actions and their configuration are stored reliably in `config.json` via a `ConfigManager`.
-- **Live Menu Sync:** When actions are added, edited, deleted, or reordered, the menu bar menu is rebuilt so the status item stays in sync with the saved configuration.
+- The app stays visible in the Dock and also exposes a menu bar status item.
+- Window opacity can be adjusted from 20% to 100%.
+- Always-on-top toggles the window level between `.normal` and `.floating`.
+- Show-on-all-desktops toggles `.canJoinAllSpaces` on the main window.
+- Window resizing tries to pin the bottom-right edge so mode switches feel anchored.
+- A screen-bounds safety pass keeps the window visible after major size changes.
 
-## 4. Automatic Window Resizing
-- **Dynamic Content Sizing:** The application dynamically calculates the target height of its window based on the active `ViewMode` and the underlying list. This prevents 'empty negative spacing' at the bottom of the list when only a few items are configured.
-- **Focus Rings Disabled:** Custom `DragView` intercepts first responder status but purposefully overrides `focusRingType` to `.none` to prevent MacOS drawing an arbitrary blue Focus Ring outline in the center of the drag elements.
-- **Shortcut Coverage:** `Ctrl + Cmd + L`, `M`, and `S` switch view modes, `Ctrl + Cmd + T` toggles Always on Top, `Ctrl + Cmd + D` toggles All Desktops, `Cmd + ,` toggles inline settings, and `Cmd + [Key]` runs a configured action while the app window is focused.
+## Actions
 
-## 5. Quick Launch Dock
-- **Integrated Dock Structure:** The bottom icon dock forces components together inside a slightly transparent pill container, utilizing 16px vertical semantic `Divider()` lines to visibly group the actions without padding separating the clickable icons.
-- **Available Apps Only:** Quick Launch icons appear only for applications that can actually be resolved on the machine, and separators render only between the visible icons.
+- Actions are loaded from `~/Library/Application Support/MacControlCenter/config.json`.
+- Adding, editing, deleting, or reordering actions saves immediately and rebuilds the menu bar menu.
+- Action shortcuts run with `Cmd + [Key]` when the user is not editing a text field.
+- `app` actions launch application bundles through `NSWorkspace`.
+- `shell` actions run via `/bin/sh -c`.
+- Empty or invalid actions fall back to a notification instead of crashing.
 
----
-*Created as part of Stage 1 Implementation Plan.*
+## Shortcuts
+
+- `Ctrl + Cmd + L`: Expanded mode
+- `Ctrl + Cmd + M`: Mini mode
+- `Ctrl + Cmd + S`: Dot mode
+- `Ctrl + Cmd + T`: Toggle Always on Top
+- `Ctrl + Cmd + D`: Toggle Show on All Desktops
+- `Cmd + ,`: Toggle inline settings
+
+## Quick Launch Dock
+
+- The dock currently attempts to resolve Google Chrome, ChatGPT, and Telegram.
+- Only apps that can be found on the machine are shown.
+- Dividers render only between visible dock items.

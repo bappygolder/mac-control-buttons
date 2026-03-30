@@ -1,54 +1,53 @@
 # Mac Control Center
 
-A native macOS control app built with SwiftUI and AppKit.
-It presents a lightning button in the menu bar and a normal Dock app window, replacing the older Python + rumps setup with a single Apple-native bundle.
+Mac Control Center is a native macOS utility built with SwiftUI and AppKit. It gives you a menu bar entry, a normal Dock window, configurable action buttons, keyboard shortcuts, and lightweight window modes for quick access.
 
-## Setup & Compilation
+## Build
 
-You don't need Python or virtual environments anymore. To build the app yourself:
+From the project root:
 
 ```bash
-cd "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre"
 chmod +x build.sh
 ./build.sh
 ```
 
-This will create a `build/MacControlCenter.app` application bundle.
+This creates `build/MacControlCenter.app`.
 
-If the build fails before compilation starts with an `xcrun` or Command Line Tools error, the issue is with the local macOS toolchain rather than the project source. Reinstall Command Line Tools or point `xcode-select` at a working Xcode installation, then rerun `./build.sh`.
+If the build fails before compilation starts with an `xcrun` or Command Line Tools error, the issue is usually local macOS tooling rather than project source. Point `xcode-select` at a working Xcode installation or reinstall Command Line Tools, then rerun `./build.sh`.
 
-## How to Run the App
-
-Whenever you restart your Mac or want to launch the app, simply run the compiled app:
+## Run
 
 ```bash
-open "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre/build/MacControlCenter.app"
+open "build/MacControlCenter.app"
 ```
 
-*Alternatively, you can just double click `build/MacControlCenter.app` in Finder.* The app opens a regular macOS window, appears in the Dock while running, and also adds a lightning button to the menu bar.
+You can also launch the built app from Finder.
 
-## What to Expect
+## Core Behavior
 
-- A template bolt icon appears in the macOS menu bar.
-- The app also appears in the Dock while it is running.
-- Clicking it shows menu items like your custom actions:
-  - Open Control Center
-  - Reset Window Size
-  - Your configured actions
-  - Quit
-- Pressing `Cmd + [Key]` runs a configured action while the app window is focused.
+- The app adds a lightning-button status item to the macOS menu bar.
+- It also runs as a normal Dock app with a resizable control window.
+- Actions can be added, edited, reordered, and run from the main window.
+- `Cmd + [Key]` runs a configured action while the window is focused.
 - `Ctrl + Cmd + L`, `M`, and `S` switch between Expanded, Mini, and Dot view.
-- `Ctrl + Cmd + T` toggles Always on Top, `Ctrl + Cmd + D` toggles Show on All Desktops, and `Cmd + ,` toggles inline settings.
-- In Settings, you can dynamically add, run, edit, delete, and reorder actions.
-- The configuration is saved automatically to `~/Library/Application Support/MacControlCenter/config.json`.
-- Quit closes the app entirely.
+- `Ctrl + Cmd + T` toggles Always on Top.
+- `Ctrl + Cmd + D` toggles Show on All Desktops.
+- `Cmd + ,` opens or closes inline settings.
 
-## macOS Permissions
+## Persistence
 
-macOS may prompt to allow Notifications for the app. Allowing them enables the click notifications when an action runs.
+- Action definitions are stored in `~/Library/Application Support/MacControlCenter/config.json`.
+- Window and preference state are stored in macOS `UserDefaults`.
+- The local task tracker lives in `TaskTracker/` and uses browser `localStorage` for personal edits unless you export and commit changes back into the repo.
 
-## Roadmap & Future Features
+## Project Docs
 
-- **Downloadable Installer:** Create a compiled `.dmg` or `.app.zip` release so non-developers can simply download and install the app without running terminal build scripts.
-- **Automated CI/CD:** Set up GitHub Actions or a similar pipeline to automatically build and publish release binaries whenever new features are pushed.
-- **System Integration:** Options to Launch at Login automatically and seamless installation into the `/Applications` folder.
+- Repo docs index: `docs/README.md`
+- Behavior reference: `BEHAVIORS.md`
+- Security policy: `SECURITY.md`
+- Local task tracker: `TaskTracker/index.html`
+- Local docs hub: `TaskTracker/docs.html`
+
+## Current Release State
+
+The project currently supports local builds through `build.sh`. It does not yet have a GitHub Actions release pipeline or a packaged `.dmg`/`.zip` distribution flow.
