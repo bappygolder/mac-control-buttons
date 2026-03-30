@@ -44,10 +44,17 @@ func createIcon(size: Int, filename: String) {
 let fm = FileManager.default
 try? fm.createDirectory(atPath: "MyIcon.iconset", withIntermediateDirectories: true)
 
-let sizes = [16, 32, 64, 128, 256, 512, 1024]
-for s in sizes {
-    createIcon(size: s, filename: "MyIcon.iconset/icon_\(s)x\(s).png")
-    if s < 512 {
-        createIcon(size: s * 2, filename: "MyIcon.iconset/icon_\(s)x\(s)@2x.png")
-    }
+let iconSpecs: [(pointSize: Int, scale: Int)] = [
+    (16, 1), (16, 2),
+    (32, 1), (32, 2),
+    (128, 1), (128, 2),
+    (256, 1), (256, 2),
+    (512, 1), (512, 2)
+]
+
+for spec in iconSpecs {
+    let pixelSize = spec.pointSize * spec.scale
+    let suffix = spec.scale == 2 ? "@2x" : ""
+    let filename = "MyIcon.iconset/icon_\(spec.pointSize)x\(spec.pointSize)\(suffix).png"
+    createIcon(size: pixelSize, filename: filename)
 }

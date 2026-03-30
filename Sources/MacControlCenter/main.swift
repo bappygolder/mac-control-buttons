@@ -8,13 +8,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        NSApp.setActivationPolicy(.regular)
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
+            button.toolTip = "Mac Control Center"
             button.title = "⚡"
         }
-        
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleConfigDidChange(_:)),
+            name: ConfigManager.configDidChangeNotification,
+            object: configManager
+        )
+
         constructMenu()
         openSettings(nil)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -26,27 +40,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func constructMenu() {
         let menu = NSMenu()
-        
-        let startItem = NSMenuItem(title: "🚀 Start Application", action: #selector(startApplication(_:)), keyEquivalent: "s")
+
+        let startItem = NSMenuItem(title: "Open Control Center", action: #selector(startApplication(_:)), keyEquivalent: "")
         startItem.target = self
         menu.addItem(startItem)
-        
-        let resetItem = NSMenuItem(title: "Reset Size (Debug)", action: #selector(resetSize(_:)), keyEquivalent: "r")
+
+        let resetItem = NSMenuItem(title: "Reset Window Size", action: #selector(resetSize(_:)), keyEquivalent: "")
         resetItem.target = self
         menu.addItem(resetItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
+        if configManager.buttons.isEmpty {
+            let emptyItem = NSMenuItem(title: "No actions configured yet", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            menu.addItem(emptyItem)
+        }
+
         for button in configManager.buttons {
-            let item = NSMenuItem(title: button.name, action: #selector(runAction(_:)), keyEquivalent: button.key.lowercased())
+            let keyEquivalent = button.key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let item = NSMenuItem(title: button.name, action: #selector(runAction(_:)), keyEquivalent: keyEquivalent)
             item.target = self
             item.representedObject = button
             menu.addItem(item)
         }
-        
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        
+
         statusItem.menu = menu
     }
     
@@ -76,7 +97,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func openSettings(_ sender: Any?) {
         if settingsWindow == nil {
-            let contentView = SettingsHostingView().environmentObject(configManager)
             let window = BottomRightAnchoredWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 350, height: 450),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -84,17 +104,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.isReleasedWhenClosed = false
             window.center()
             window.title = "Mac Control Center"
-            window.contentView = NSHostingView(rootView: contentView.environmentObject(configManager))
+            window.contentView = NSHostingView(rootView: SettingsHostingView().environmentObject(configManager))
             window.setFrameAutosaveName("MacControlCenterMainWindow")
             settingsWindow = window
         }
-        
+
         settingsWindow?.makeKeyAndOrderFront(nil)
         AppSettings.shared.applyWindowSettings()
         NSApp.activate(ignoringOtherApps: true)
     }
-    
-    public func reloadMenu() {
+
+    @objc private func handleConfigDidChange(_ notification: Notification) {
+        reloadMenu()
+    }
+
+    private func reloadMenu() {
         constructMenu()
     }
 }

@@ -1,7 +1,6 @@
 import SwiftUI
 import Cocoa
 
-// ... (AppSettings remains unchanged, inserting later)
 enum ViewMode: String {
     case expanded, mini, dot
 }
@@ -70,16 +69,33 @@ class AppSettings: ObservableObject {
     
     private func toggleLaunchAtLogin(_ enable: Bool) {
         let appPath = Bundle.main.bundlePath
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         let script: String
         if enable {
-            script = "tell application \"System Events\" to make login item at end with properties {path:\"\(appPath)\", hidden:false}"
+            script = """
+            tell application "System Events"
+                if exists login item "Mac Control Center" then
+                    set path of login item "Mac Control Center" to "\(appPath)"
+                else
+                    make login item at end with properties {name:"Mac Control Center", path:"\(appPath)", hidden:false}
+                end if
+            end tell
+            """
         } else {
-            script = "tell application \"System Events\" to delete login item \"Mac Control Center\""
+            script = """
+            tell application "System Events"
+                if exists login item "Mac Control Center" then
+                    delete login item "Mac Control Center"
+                end if
+            end tell
+            """
         }
+
         let process = Process()
-        process.launchPath = "/usr/bin/osascript"
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", script]
-        process.launch()
+        try? process.run()
     }
 }
 
@@ -584,20 +600,17 @@ struct SettingsHostingView: View {
             
             if self.localKeyMonitor == nil {
                 self.localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                    if event.modifierFlags.contains([.command, .control]) {
-                        if event.charactersIgnoringModifiers?.lowercased() == "l" {
-                            self.toggleViewMode(to: .expanded)
-                            return nil // Handled
-                        } else if event.charactersIgnoringModifiers?.lowercased() == "m" {
-                            self.toggleViewMode(to: .mini)
-                            return nil // Handled
-                        } else if event.charactersIgnoringModifiers?.lowercased() == "s" {
-                            self.toggleViewMode(to: .dot)
-                            return nil
-                        }
+                    if self.handleKeyEvent(event) {
+                        return nil
                     }
                     return event
                 }
+            }
+        }
+        .onDisappear {
+            if let monitor = self.localKeyMonitor {
+                NSEvent.removeMonitor(monitor)
+                self.localKeyMonitor = nil
             }
         }
         .onReceive(configManager.$buttons) { _ in
@@ -620,6 +633,9 @@ struct SettingsHostingView: View {
     private func sheetView(for item: ActiveSheet) -> AnyView {
         switch item {
         case .edit(let index):
+            guard self.configManager.buttons.indices.contains(index) else {
+                return AnyView(EmptyView())
+            }
             return AnyView(EditActionSheet(activeSheet: self.$activeSheet, index: index))
         }
     }
@@ -656,6 +672,77 @@ struct SettingsHostingView: View {
     
     private func setHoveringDot(_ hovering: Bool) {
         // Redundant with the pulse animation now, but keeping for structural safety
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) -> Bool {
+        let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+
+        if flags == [.command, .control] {
+            switch characters {
+            case "l":
+                self.toggleViewMode(to: .expanded)
+                return true
+            case "m":
+                self.toggleViewMode(to: .mini)
+                return true
+            case "s":
+                self.toggleViewMode(to: .dot)
+                return true
+            case "t":
+                self.settings.alwaysOnTop.toggle()
+                return true
+            case "d":
+                self.settings.showOnAllDesktops.toggle()
+                return true
+            default:
+                break
+            }
+        }
+
+        if flags == [.command] {
+            if characters == "," {
+                self.toggleInlineSettings()
+                return true
+            }
+
+            guard !isEditingTextInput(),
+                  let button = matchingActionShortcut(for: characters) else {
+                return false
+            }
+
+            self.configManager.performAction(for: button)
+            return true
+        }
+
+        return false
+    }
+
+    private func matchingActionShortcut(for key: String) -> ActionButton? {
+        configManager.buttons.first {
+            !$0.key.isEmpty && $0.key.lowercased() == key
+        }
+    }
+
+    private func isEditingTextInput() -> Bool {
+        guard let textView = NSApp.keyWindow?.firstResponder as? NSTextView else {
+            return false
+        }
+
+        return textView.isEditable
+    }
+
+    private func toggleInlineSettings() {
+        withAnimation {
+            if self.showingInlineSettings {
+                self.showingInlineSettings = false
+            } else {
+                self.isAddingAction = false
+                self.isEditing = false
+                self.showingInlineSettings = true
+            }
+            self.applyWindowDecorations()
+        }
     }
     
     private func toggleViewMode(to mode: ViewMode) {
@@ -997,6 +1084,10 @@ struct EditActionSheet: View {
                 Spacer()
                 
                 Button("Save Changes") {
+                    guard self.configManager.buttons.indices.contains(self.index) else {
+                        self.activeSheet = nil
+                        return
+                    }
                     let typeToSave = self.actionType == "none" ? nil : self.actionType
                     let targetToSave = self.actionType == "none" ? nil : self.actionTarget
                     var btn = self.configManager.buttons[self.index]
@@ -1020,6 +1111,10 @@ struct EditActionSheet: View {
         .padding(20)
         .frame(width: 380)
         .onAppear {
+            guard self.configManager.buttons.indices.contains(self.index) else {
+                self.activeSheet = nil
+                return
+            }
             let btn = self.configManager.buttons[self.index]
             self.editName = btn.name
             self.editKey = btn.key
@@ -1029,14 +1124,29 @@ struct EditActionSheet: View {
     }
 }
 
+struct QuickLaunchApp: Identifiable {
+    let name: String
+    let bundleId: String
+    let defaultPath: String
+
+    var id: String { bundleId }
+}
+
 struct QuickLaunchDockView: View {
     let apps = [
-        ("Google Chrome", "com.google.Chrome", "/Applications/Google Chrome.app"),
-        ("ChatGPT", "com.openai.chat", "/Applications/ChatGPT.app"),
-        ("Telegram", "ru.keepcoder.Telegram", "/Applications/Telegram.app")
+        QuickLaunchApp(name: "Google Chrome", bundleId: "com.google.Chrome", defaultPath: "/Applications/Google Chrome.app"),
+        QuickLaunchApp(name: "ChatGPT", bundleId: "com.openai.chat", defaultPath: "/Applications/ChatGPT.app"),
+        QuickLaunchApp(name: "Telegram", bundleId: "ru.keepcoder.Telegram", defaultPath: "/Applications/Telegram.app")
     ]
-    
-    func getAppURL(for app: (name: String, bundleId: String, defaultPath: String)) -> URL? {
+
+    private var availableApps: [(app: QuickLaunchApp, url: URL)] {
+        apps.compactMap { app in
+            guard let url = getAppURL(for: app) else { return nil }
+            return (app: app, url: url)
+        }
+    }
+
+    func getAppURL(for app: QuickLaunchApp) -> URL? {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleId) {
             return url
         }
@@ -1047,38 +1157,44 @@ struct QuickLaunchDockView: View {
         return nil
     }
 
+    @ViewBuilder
+    private func dockItemView(entry: (app: QuickLaunchApp, url: URL), showsDivider: Bool) -> some View {
+        Button(action: {
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = true
+            NSWorkspace.shared.openApplication(at: entry.url, configuration: config, completionHandler: nil)
+        }) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 20, height: 20)
+                .saturation(0.0)
+                .opacity(0.8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .background(TooltipView(text: entry.app.name))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+
+        if showsDivider {
+            Divider().frame(height: 16)
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(apps.indices, id: \.self) { index in
-                Group {
-                    if self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2)) != nil {
-                        Button(action: {
-                            if let url = self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2)) {
-                                let config = NSWorkspace.OpenConfiguration()
-                                NSWorkspace.shared.openApplication(at: url, configuration: config, completionHandler: nil)
-                            }
-                        }) {
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: self.getAppURL(for: (self.apps[index].0, self.apps[index].1, self.apps[index].2))!.path))
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
-                                .saturation(0.0) // Black and white (grayscale)
-                                .opacity(0.8)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .background(TooltipView(text: self.apps[index].0))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        
-                        if index < self.apps.count - 1 {
-                            Divider().frame(height: 16)
-                        }
+        Group {
+            if availableApps.isEmpty {
+                EmptyView()
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(0..<availableApps.count, id: \.self) { index in
+                        self.dockItemView(entry: self.availableApps[index], showsDivider: index < self.availableApps.count - 1)
                     }
                 }
+                .background(Color.gray.opacity(0.12))
+                .cornerRadius(12)
+                .padding(.vertical, 8)
             }
         }
-        .background(Color.gray.opacity(0.12))
-        .cornerRadius(12)
-        .padding(.vertical, 8)
     }
 }

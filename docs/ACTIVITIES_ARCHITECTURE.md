@@ -13,9 +13,9 @@ Activities are defined in user configuration (`config.json`, located in `~/Libra
 - **`actionTarget`**: Defines the specific target value (e.g., full absolute path to an `.app` like `/Applications/Safari.app`, or a literal shell script line).
 
 ### Activity Execution (`ActivityHandler.swift`)
-All actions are routed through `ActivityHandler.shared.execute(button:)`. This prevents the UI threads or `ConfigManager` from getting bloated with system launch logic.
-- `app` targets are launched via Apple's standard `/usr/bin/open -n` passing the literal path to ensure correct bundle resolution and independent instances.
-- `shell` targets are triggered directly via Bash/SH execution.
+All actions are routed through `ActivityHandler.shared.execute(button:)`. This prevents the UI threads or `ConfigManager` from getting bloated with system launch logic, and it keeps action execution dependent on saved config instead of hardcoded personal paths.
+- `app` targets are launched through `NSWorkspace.OpenConfiguration`, preserving native app activation and new-instance launching.
+- `shell` targets are triggered directly via `/bin/sh -c ...`.
 
 ## Future Scope
 In subsequent iterations, opening and closing apps across macOS is intended to be a ubiquitous, reusable small feature. Users should be able to:

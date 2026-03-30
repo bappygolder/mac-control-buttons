@@ -1,7 +1,7 @@
 # Mac Control Center
 
-A blazing fast, native macOS menu bar app built with Swift and AppKit. 
-(Replaces the old Python + rumps setup with pure Apple native code!)
+A native macOS control app built with SwiftUI and AppKit.
+It presents a lightning button in the menu bar and a normal Dock app window, replacing the older Python + rumps setup with a single Apple-native bundle.
 
 ## Setup & Compilation
 
@@ -15,6 +15,8 @@ chmod +x build.sh
 
 This will create a `build/MacControlCenter.app` application bundle.
 
+If the build fails before compilation starts with an `xcrun` or Command Line Tools error, the issue is with the local macOS toolchain rather than the project source. Reinstall Command Line Tools or point `xcode-select` at a working Xcode installation, then rerun `./build.sh`.
+
 ## How to Run the App
 
 Whenever you restart your Mac or want to launch the app, simply run the compiled app:
@@ -23,19 +25,22 @@ Whenever you restart your Mac or want to launch the app, simply run the compiled
 open "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/0A. Mac Control Centre copy/build/MacControlCenter.app"
 ```
 
-*Alternatively, you can just double click `build/MacControlCenter.app` in Finder.* It will run silently in the background and show up in your menu bar.
+*Alternatively, you can just double click `build/MacControlCenter.app` in Finder.* The app opens a regular macOS window, appears in the Dock while running, and also adds a lightning button to the menu bar.
 
 ## What to Expect
 
-- A ⚡ icon appears in the macOS menu bar.
+- A template bolt icon appears in the macOS menu bar.
+- The app also appears in the Dock while it is running.
 - Clicking it shows menu items like your custom actions:
-  - Start My Day
-  - Post The Next Comment
-  - ⚙️ Settings
+  - Open Control Center
+  - Reset Window Size
+  - Your configured actions
   - Quit
-- Clicking "Settings" opens a native macOS unified settings window.
-- In Settings, you can dynamically Add, Run, and Delete actions, as well as assign keyboard shortcuts!
-- The configuration is saved automatically to `config.json`.
+- Pressing `Cmd + [Key]` runs a configured action while the app window is focused.
+- `Ctrl + Cmd + L`, `M`, and `S` switch between Expanded, Mini, and Dot view.
+- `Ctrl + Cmd + T` toggles Always on Top, `Ctrl + Cmd + D` toggles Show on All Desktops, and `Cmd + ,` toggles inline settings.
+- In Settings, you can dynamically add, run, edit, delete, and reorder actions.
+- The configuration is saved automatically to `~/Library/Application Support/MacControlCenter/config.json`.
 - Quit closes the app entirely.
 
 ## macOS Permissions

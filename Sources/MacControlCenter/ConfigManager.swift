@@ -13,76 +13,99 @@ struct ActionButton: Codable, Identifiable, Hashable {
     }
 }
 
+private struct ActionConfigFile: Codable {
+    var buttons: [ActionButton]
+}
+
 class ConfigManager: ObservableObject {
     static let shared = ConfigManager()
-    
+    static let configDidChangeNotification = Notification.Name("MacControlCenterConfigDidChange")
+
     @Published var buttons: [ActionButton] = []
-    
+
     private let configURL: URL
-    
+
     init() {
-        // Look for config.json in the same folder as the app executable or a specific path
-        // For menu bar apps, it's often in App Support, but let's keep it next to the app for now
-        // Assuming we run it from the project directory and config.json is there.
-        // Actually, we can use the user's home directory or the path where config.json was.
         let fileManager = FileManager.default
         let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let configDir = appSupportURL.appendingPathComponent("MacControlCenter")
-        
+
         if !fileManager.fileExists(atPath: configDir.path) {
             try? fileManager.createDirectory(at: configDir, withIntermediateDirectories: true, attributes: nil)
         }
-        
+
         configURL = configDir.appendingPathComponent("config.json")
         load()
     }
-    
+
     func load() {
         guard FileManager.default.fileExists(atPath: configURL.path) else {
-            // Default config
-            buttons = [
-                ActionButton(name: "Start My Day", key: "s", actionType: "app", actionTarget: "/Users/bappygolder/Desktop/Projects/_1. Co-Work Projects/1. Start My Day/1. Start My Day.app"),
-                ActionButton(name: "Post The Next Comment", key: "p", actionType: nil, actionTarget: nil),
-                ActionButton(name: "New Chrome window", key: "c", actionType: "shell", actionTarget: "open -na 'Google Chrome'")
-            ]
+            buttons = defaultButtons()
             save()
             return
         }
-        
+
         do {
             let data = try Data(contentsOf: configURL)
-            let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
-            if let buttonsArray = json?["buttons"] as? [[String: Any]] {
-                self.buttons = buttonsArray.compactMap { dict in
-                    guard let name = dict["name"] as? String else { return nil }
-                    let key = dict["key"] as? String ?? ""
-                    let actionType = dict["actionType"] as? String
-                    let actionTarget = dict["actionTarget"] as? String
-                    return ActionButton(name: name, key: key, actionType: actionType, actionTarget: actionTarget)
-                }
-            }
+            let config = try JSONDecoder().decode(ActionConfigFile.self, from: data)
+            buttons = config.buttons.map(normalized(button:))
         } catch {
             print("Error loading config: \(error)")
+            buttons = defaultButtons()
         }
+
+        publishChange()
     }
-    
+
     func performAction(for button: ActionButton) {
         ActivityHandler.shared.execute(button: button)
     }
-    
+
     func save() {
-        let dictArray = buttons.map { btn -> [String: String] in
-            var dict = ["name": btn.name, "key": btn.key]
-            if let type = btn.actionType { dict["actionType"] = type }
-            if let target = btn.actionTarget { dict["actionTarget"] = target }
-            return dict
-        }
-        let saveDict = ["buttons": dictArray]
+        buttons = buttons.map(normalized(button:))
+        let config = ActionConfigFile(buttons: buttons)
         do {
-            let data = try JSONSerialization.data(withJSONObject: saveDict, options: .prettyPrinted)
-            try data.write(to: configURL)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(config)
+            try data.write(to: configURL, options: .atomic)
+            publishChange()
         } catch {
             print("Error saving config: \(error)")
         }
+    }
+
+    private func defaultButtons() -> [ActionButton] {
+        [
+            ActionButton(name: "Open Safari", key: "s", actionType: "shell", actionTarget: "open -a Safari"),
+            ActionButton(name: "Open Notes", key: "n", actionType: "shell", actionTarget: "open -a Notes"),
+            ActionButton(name: "New Chrome Window", key: "c", actionType: "shell", actionTarget: "open -na 'Google Chrome'")
+        ]
+    }
+
+    private func normalized(button: ActionButton) -> ActionButton {
+        var cleanedButton = button
+        cleanedButton.name = cleanedButton.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        cleanedButton.key = String(cleanedButton.key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().prefix(1))
+
+        if let actionType = cleanedButton.actionType?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !actionType.isEmpty {
+            cleanedButton.actionType = actionType
+        } else {
+            cleanedButton.actionType = nil
+        }
+
+        if let actionTarget = cleanedButton.actionTarget?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !actionTarget.isEmpty {
+            cleanedButton.actionTarget = actionTarget
+        } else {
+            cleanedButton.actionTarget = nil
+        }
+
+        return cleanedButton
+    }
+
+    private func publishChange() {
+        NotificationCenter.default.post(name: Self.configDidChangeNotification, object: self)
     }
 }
