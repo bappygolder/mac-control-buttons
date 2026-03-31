@@ -32,13 +32,8 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "nav-item";
-      button.title = item.title + " — " + item.summary;
-      button.innerHTML =
-        "<strong>" +
-        escapeHtml(item.title) +
-        "</strong><span>" +
-        escapeHtml(item.summary) +
-        "</span>";
+      button.title = item.summary;
+      button.textContent = item.title;
       button.addEventListener("click", function () {
         openItem(item);
       });

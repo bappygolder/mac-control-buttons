@@ -3,69 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mac Control Center Docs Hub</title>
+  <title>Mac Control Center — Docs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <script defer src="project-data.js"></script>
   <script defer src="docs-content.js"></script>
   <script defer src="docs-app.js"></script>
 </head>
 <body>
-  <div class="shell">
-    <header class="shell-header">
+
+  <header class="site-header">
+    <div class="header-inner">
       <div class="brand">
-        <p class="eyebrow">Local Project System</p>
-        <h1>Mac Control Center Docs Hub</h1>
-        <p>Sidebar on the left, readable markdown preview on the right, and the same project updates preserved.</p>
+        <h1>Mac Control Center</h1>
+        <p>Project docs &amp; skills reference</p>
       </div>
       <nav class="tabs" aria-label="Tracker navigation">
         <a class="tab" href="index.html">Tasks</a>
         <a class="tab active" href="docs.html">Docs</a>
       </nav>
-    </header>
+    </div>
+  </header>
 
-    <section class="hero hero-compact">
-      <div class="hero-copy">
-        <div class="pill-row">
-          <span class="kicker" id="docsReviewedOn">Review date</span>
-          <span class="kicker" id="docsMaintainedBy">Maintained by</span>
-        </div>
-        <h2>Readable project docs</h2>
-        <p>Use the left sidebar to switch between repo docs, root reference files, and project skills. The preview pane keeps everything in one place instead of opening raw markdown in a new tab.</p>
+  <!-- Full-height docs layout -->
+  <div class="docs-page">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Documentation</div>
+        <div class="sidebar-items" id="docsNav"></div>
       </div>
-      <aside class="toolbar-card">
-        <div class="button-row">
-          <a class="button-link primary" href="index.html">Open Tracker</a>
-          <a class="button-link secondary" href="../docs/README.md">Open Raw Docs Index</a>
-        </div>
-      </aside>
-    </section>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Skills</div>
+        <div class="sidebar-items" id="skillsNav"></div>
+      </div>
+    </aside>
 
-    <section class="docs-layout">
-      <aside class="sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">Documentation</div>
-          <div class="nav-list" id="docsNav"></div>
+    <!-- Doc viewer -->
+    <main class="docs-viewer">
+      <div class="viewer-header">
+        <div>
+          <p class="viewer-eyebrow" id="viewerType">Document</p>
+          <h2 class="viewer-title" id="viewerTitle">Loading…</h2>
+          <p class="viewer-summary" id="viewerSummary"></p>
         </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">Skills</div>
-          <div class="nav-list" id="skillsNav"></div>
-        </div>
-      </aside>
+        <a class="ghost" id="openRawLink" href="../docs/README.md" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);text-decoration:none;font-size:0.8rem;color:var(--muted);transition:color 0.15s,background 0.15s;" onmouseover="this.style.color='var(--text)';this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='var(--muted)';this.style.background='transparent'">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open raw
+        </a>
+      </div>
+      <div class="markdown-view" id="docPreview"></div>
+    </main>
 
-      <article class="viewer">
-        <div class="viewer-header">
-          <div>
-            <p class="eyebrow" id="viewerType">Document</p>
-            <h2 id="viewerTitle">Loading...</h2>
-            <p class="viewer-summary" id="viewerSummary"></p>
-          </div>
-          <div class="button-row">
-            <a class="button-link secondary" id="openRawLink" href="../docs/README.md">Open Raw File</a>
-          </div>
-        </div>
-        <div class="markdown-view" id="docPreview"></div>
-      </article>
-    </section>
-  </div>
+  </div><!-- /.docs-page -->
+
+  <!-- Hidden pill IDs required by docs-app.js hydration -->
+  <span id="docsReviewedOn" hidden></span>
+  <span id="docsMaintainedBy" hidden></span>
+
 </body>
 </html>

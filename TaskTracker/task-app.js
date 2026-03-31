@@ -397,7 +397,7 @@
   }
 
   function renderViewHeader(filteredTasks) {
-    elements.workspaceTitle.textContent = activeView === "cards" ? "Cards" : "Board";
+    elements.workspaceTitle.textContent = activeView === "cards" ? "Tasks / Actions" : "Board";
     elements.filterSummary.textContent =
       filteredTasks.length + " shown · " + tasks.length + " total · " + (activeView === "cards" ? "list view" : "kanban view");
   }
@@ -462,11 +462,11 @@
 
     const tools = document.createElement("div");
     tools.className = "list-tools";
-    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
-      openModal(task);
-    }));
     tools.appendChild(makeIconButton("Delete task", trashIcon(), function () {
       deleteTask(task.id);
+    }));
+    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
+      openModal(task);
     }));
 
     row.appendChild(dot);
@@ -499,8 +499,13 @@
       var column = document.createElement("section");
       column.className = "board-column" + (col.isDone ? " board-column--done" : "");
 
+      // ── Header (click to collapse) ──────────────────────────────────────────
       var header = document.createElement("div");
       header.className = "board-column-header";
+      header.title = "Click to collapse / expand";
+
+      var left = document.createElement("div");
+      left.className = "board-column-header-left";
 
       var titleEl = document.createElement("div");
       titleEl.className = "board-column-title";
@@ -510,12 +515,23 @@
       countEl.className = "board-column-count";
       countEl.textContent = String(laneTasks.length);
 
-      header.appendChild(titleEl);
-      header.appendChild(countEl);
+      left.appendChild(titleEl);
+      left.appendChild(countEl);
 
+      var chevron = document.createElement("span");
+      chevron.className = "board-column-chevron";
+      chevron.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+      header.appendChild(left);
+      header.appendChild(chevron);
+
+      header.addEventListener("click", function () {
+        column.classList.toggle("is-collapsed");
+      });
+
+      // ── Body (drop zone) ────────────────────────────────────────────────────
       var body = document.createElement("div");
       body.className = "board-column-body";
-      // Dropping onto the done column sends tasks to "completed"
       body.dataset.lane = col.isDone ? "completed" : col.key;
 
       body.addEventListener("dragover", function (e) {
@@ -578,11 +594,11 @@
 
     const tools = document.createElement("div");
     tools.className = "list-tools board-card-tools";
-    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
-      openModal(task);
-    }));
     tools.appendChild(makeIconButton("Delete task", trashIcon(), function () {
       deleteTask(task.id);
+    }));
+    tools.appendChild(makeIconButton("Edit task", pencilIcon(), function () {
+      openModal(task);
     }));
 
     top.appendChild(dot);
