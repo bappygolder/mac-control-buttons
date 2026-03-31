@@ -1,10 +1,11 @@
 window.MCCProjectData = {
   project: {
-    name: "Mac Control Center",
+    name: "LTM",
+    fullName: "Mac Control Center",
     reviewedOn: "2026-03-30",
     maintainedBy: "Codex (GPT-5)",
     summary:
-      "Local-first task tracking and project docs for the native macOS Mac Control Center utility."
+      "Local Task Manager — self-contained task tracking and project docs for the Mac Control Center repo."
   },
   tracker: {
     storageKey: "mac-control-center-task-tracker-v1",
