@@ -60,7 +60,7 @@
   let renamingColKey    = null; // column key being renamed
   let dragTaskId        = null;
   let colDragKey        = null; // column key being dragged for reorder
-  let colDragOverKey    = null; // column key being dragged over
+  let colDropInsertIdx  = null; // insertion index during column drag (0 = before first)
 
   // Detail panel view mode: "side" | "center" | "full"
   let detailMode = "side";
@@ -419,6 +419,27 @@
     el.addColConfirm.addEventListener("click", confirmAddColumn);
     el.addColInput.addEventListener("keydown", e => { if (e.key === "Enter") confirmAddColumn(); });
 
+    // Board column drag-to-reorder — container-level drop
+    el.boardColumns.addEventListener("dragover", e => {
+      if (colDragKey) e.preventDefault();
+    });
+    el.boardColumns.addEventListener("drop", e => {
+      if (!colDragKey || colDropInsertIdx === null) return;
+      e.preventDefault();
+      clearColDropIndicators();
+      const fromIdx = boardColumns.findIndex(c => c.key === colDragKey);
+      if (fromIdx < 0) { colDragKey = null; colDropInsertIdx = null; return; }
+      const copy = boardColumns.slice();
+      const [moved] = copy.splice(fromIdx, 1);
+      const adjusted = colDropInsertIdx > fromIdx ? colDropInsertIdx - 1 : colDropInsertIdx;
+      copy.splice(adjusted, 0, moved);
+      boardColumns = copy;
+      colDragKey = null;
+      colDropInsertIdx = null;
+      writeState();
+      renderBoardView(filteredTasks());
+    });
+
     // Close menus on outside click
     document.addEventListener("click", e => {
       if (!el.colMenu.contains(e.target) && !e.target.closest(".board-col-menu-btn")) {
@@ -696,7 +717,7 @@
     el.boardHiddenChips.innerHTML = "";
     let hasCollapsed = false;
 
-    boardColumns.forEach(col => {
+    boardColumns.forEach((col, boardIdx) => {
       const isCollapsed = collapsedCols.includes(col.key);
       const colTasks    = filtered.filter(t => col.lanes.includes(t.lane)).sort(sortTasks);
 
@@ -704,9 +725,21 @@
         el.boardHiddenChips.appendChild(buildCollapsedChip(col, colTasks.length));
         hasCollapsed = true;
       } else {
+        // Drop indicator before this column
+        const ind = document.createElement("div");
+        ind.className = "col-drop-indicator";
+        ind.dataset.insertIdx = String(boardIdx);
+        el.boardColumns.appendChild(ind);
+
         el.boardColumns.appendChild(buildExpandedColumn(col, colTasks));
       }
     });
+
+    // Trailing drop indicator (after last expanded column)
+    const trailInd = document.createElement("div");
+    trailInd.className = "col-drop-indicator";
+    trailInd.dataset.insertIdx = String(boardColumns.length);
+    el.boardColumns.appendChild(trailInd);
 
     el.boardCollapsedStrip.hidden = !hasCollapsed;
 
@@ -735,32 +768,22 @@
     });
     section.addEventListener("dragend", () => {
       colDragKey = null;
-      colDragOverKey = null;
+      colDropInsertIdx = null;
       section.classList.remove("col-dragging");
-      document.querySelectorAll(".board-column").forEach(c => c.classList.remove("col-drag-over"));
+      clearColDropIndicators();
     });
     section.addEventListener("dragover", e => {
       if (!colDragKey || colDragKey === col.key) return;
-      // Only drag-over when hovering the header
-      if (!e.target.closest(".board-column-header") && !section.classList.contains("col-drag-over")) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      document.querySelectorAll(".board-column").forEach(c => c.classList.remove("col-drag-over"));
-      section.classList.add("col-drag-over");
-      colDragOverKey = col.key;
-    });
-    section.addEventListener("drop", e => {
-      if (!colDragKey || colDragKey === col.key) return;
-      e.preventDefault();
       const fromIdx = boardColumns.findIndex(c => c.key === colDragKey);
-      const toIdx   = boardColumns.findIndex(c => c.key === col.key);
-      if (fromIdx < 0 || toIdx < 0) return;
-      const copy = boardColumns.slice();
-      const [moved] = copy.splice(fromIdx, 1);
-      copy.splice(toIdx, 0, moved);
-      boardColumns = copy;
-      writeState();
-      renderBoardView(filteredTasks());
+      const colIdx  = boardColumns.findIndex(c => c.key === col.key);
+      const rect    = section.getBoundingClientRect();
+      const insertIdx = e.clientX < rect.left + rect.width / 2 ? colIdx : colIdx + 1;
+      if (insertIdx !== colDropInsertIdx) {
+        colDropInsertIdx = insertIdx;
+        updateColDropIndicators(fromIdx);
+      }
     });
 
     // Header
@@ -780,6 +803,8 @@
     const titleEl = document.createElement("div");
     titleEl.className = "board-column-title";
     titleEl.textContent = col.label;
+    titleEl.title = "Click to rename";
+    titleEl.addEventListener("click", e => { e.stopPropagation(); openRenameModal(col.key); });
 
     const countEl = document.createElement("div");
     countEl.className = "board-column-count";
@@ -948,6 +973,17 @@
     card.addEventListener("click", () => openDetail(task.id));
 
     return card;
+  }
+
+  function clearColDropIndicators() {
+    el.boardColumns.querySelectorAll(".col-drop-indicator").forEach(d => d.classList.remove("active"));
+  }
+
+  function updateColDropIndicators(fromIdx) {
+    const noChange = colDropInsertIdx === fromIdx || colDropInsertIdx === fromIdx + 1;
+    el.boardColumns.querySelectorAll(".col-drop-indicator").forEach(d => {
+      d.classList.toggle("active", !noChange && parseInt(d.dataset.insertIdx) === colDropInsertIdx);
+    });
   }
 
   function bindDropZone(body) {

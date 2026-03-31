@@ -760,6 +760,16 @@ button.ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); 
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.board-column-title:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .board-column-count {
@@ -984,10 +994,21 @@ button.ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); 
   transform: scale(0.98);
 }
 
-/* Drop target indicator */
-.board-column.col-drag-over {
-  box-shadow: -3px 0 0 0 var(--accent);
-  border-color: rgba(139, 92, 246, 0.5);
+/* Column drop position indicator (shown between columns during drag) */
+.col-drop-indicator {
+  width: 3px;
+  align-self: stretch;
+  min-height: 60px;
+  border-radius: 2px;
+  background: transparent;
+  flex-shrink: 0;
+  pointer-events: none;
+  transition: background 0.08s, box-shadow 0.08s;
+}
+
+.col-drop-indicator.active {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.7);
 }
 
 /* Column color accents */
