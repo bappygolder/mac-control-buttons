@@ -306,6 +306,11 @@ window.MCCProjectData = {
       title: "Security Policy",
       summary: "Public-repo guidance, local-only state, and shell-action caution points.",
       path: "../SECURITY.md"
+    },
+    {
+      title: "⚠ LTM Phase Plan (temporary)",
+      summary: "Phased build plan with copy-paste prompts for each context window. Remove once all phases are complete.",
+      path: "PHASES.md"
     }
   ],
   skills: [
